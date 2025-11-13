@@ -23,6 +23,7 @@ pip install -e .
 
 ```bash
 vnnews --help
+vnnews-sentiment --help
 ```
 
 ### Collect URLs
@@ -60,6 +61,28 @@ Batching-specific options:
 - `--resume/--no-resume` – also governs whether URL offsets and batch checkpoints are honored.
 - `--reset-state` – clears both the crawl date checkpoint (`last_run.json`) and the URL offset file.
 
+### Sentiment Scoring
+
+Set `OPENAI_API_KEY` in your environment, then run:
+
+```bash
+export OPENAI_API_KEY=sk-...
+vnnews-sentiment score-file data/articles/cafef/2025/2025-11-09/example.json --model gpt-4o-mini
+```
+
+For batch processing of all crawler outputs in a directory (default JSONL destination is `data/sentiment/scores.jsonl`):
+
+```bash
+vnnews-sentiment batch data/articles/cafef --limit 200 --glob "*.json" --model gpt-4o-mini
+```
+
+Options:
+
+- `--model` / `--temperature` – configure OpenAI Responses API parameters (defaults in `vnsentiment.config`).
+- `--output PATH` – override the JSONL file.
+- `--limit N` – stop after N files when batching.
+- `--glob PATTERN` – restrict which article JSON files are scored.
+
 ## Project Layout
 
 - `src/vnnews/config.py` – shared constants and source definitions.
@@ -69,9 +92,11 @@ Batching-specific options:
 - `src/vnnews/crawler.py` – threaded article downloader using news-please.
 - `src/vnnews/state.py` – checkpoint utilities.
 - `src/vnnews/cli.py` – Typer-powered command-line interface.
+- `src/vnsentiment/*.py` – OpenAI-powered sentiment analysis helper module and CLI (`vnnews-sentiment`).
 
 ## Notes
 
 - Make sure outbound requests respect the target sites’ rate limits.
 - `news-please` pulls many dependencies; use a virtual environment.
 - Review saved JSON outputs before downstream processing.
+- For sentiment scoring, set `OPENAI_API_KEY` before running `vnnews-sentiment score-file ...` or `vnnews-sentiment batch ...`.

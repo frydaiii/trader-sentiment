@@ -15,11 +15,13 @@ dependencies = [
   "tenacity>=8.2",
   "news-please>=1.6",
   "python-dateutil>=2.8",
-  "tqdm>=4.66"
+  "tqdm>=4.66",
+  "openai==2.7.2"
 ]
 
 [project.scripts]
 vnnews = "vnnews.cli:app"
+vnnews-sentiment = "vnsentiment.cli:app"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
