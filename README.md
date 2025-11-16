@@ -26,6 +26,17 @@ vnnews --help
 vnnews-sentiment --help
 ```
 
+### Split Sentences
+
+Use the built-in helper to convert a crawled article JSON file into a list of Vietnamese sentences via [`underthesea`](https://github.com/undertheseanlp/underthesea):
+
+```bash
+vnnews split-sentences data/articles/cafef/2025/2025-11-09/example.json --output sentences.json
+```
+
+- `--field text` – choose a different JSON field if the article body is stored elsewhere.
+- `--output PATH` – persist the JSON list to a file instead of printing to stdout.
+
 ### Collect URLs
 
 ```bash

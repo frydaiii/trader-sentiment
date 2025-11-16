@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+import orjson
+from underthesea import sent_tokenize
 
 from .collectors import ArticleURLCollector, CollectionResult, write_url_lists
 from .config import (
@@ -26,6 +28,7 @@ from .state import (
     StateManager,
     determine_since_date,
 )
+from .utils import ensure_parent
 
 
 logging.basicConfig(
@@ -197,3 +200,32 @@ def crawl(
 
     if resume:
         progress_mgr.save_offset(url_file, start_offset + len(urls))
+
+
+@app.command("split-sentences")
+def split_sentences(
+    article_path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a crawler-generated JSON file."),
+    field: str = typer.Option("text", help="JSON field that contains the article body."),
+    output: Optional[Path] = typer.Option(
+        None,
+        help="Optional path to save the resulting JSON list. Defaults to printing to stdout.",
+    ),
+) -> None:
+    """Split an article body into individual sentences using underthesea."""
+
+    payload = orjson.loads(article_path.read_bytes())
+    content = payload.get(field)
+    if not isinstance(content, str) or not content.strip():
+        raise typer.BadParameter(f"Field '{field}' is missing or empty in {article_path}.")
+
+    sentences = [sentence.strip() for sentence in sent_tokenize(content) if sentence.strip()]
+    if not sentences:
+        raise typer.BadParameter("No sentences were produced from the provided content.")
+
+    rendered = orjson.dumps(sentences, option=orjson.OPT_INDENT_2).decode()
+    if output:
+        ensure_parent(output)
+        output.write_text(rendered, encoding="utf-8")
+        typer.echo(f"Wrote {len(sentences)} sentences to {output}")
+    else:
+        typer.echo(rendered)
