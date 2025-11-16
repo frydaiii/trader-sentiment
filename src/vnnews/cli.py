@@ -28,7 +28,7 @@ from .state import (
     StateManager,
     determine_since_date,
 )
-from .utils import ensure_parent
+from .utils import ensure_parent, chunked
 
 
 logging.basicConfig(
@@ -149,6 +149,11 @@ def crawl(
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
     max_workers: int = typer.Option(DEFAULT_CONCURRENCY, help="Maximum concurrent download workers."),
     max_urls: Optional[int] = typer.Option(None, help="Process at most this many URLs during this run."),
+    batch_size: Optional[int] = typer.Option(
+        None,
+        min=1,
+        help="Process URLs in batches of this size, saving resume checkpoints between batches.",
+    ),
     resume: bool = typer.Option(True, "--resume/--no-resume", help="Continue from saved state when available."),
     reset_state: bool = typer.Option(False, help="Clear saved state before running."),
 ) -> None:
@@ -188,8 +193,18 @@ def crawl(
         typer.echo("No URLs selected for this batch after applying limits.")
         return
 
+    processed_dates: List[date] = []
     with ArticleCrawler(SOURCES, output_dir=ARTICLES_DIR, max_workers=max_workers) as crawler:
-        processed_dates = crawler.crawl(urls, since=effective_since, max_workers=max_workers)
+        if batch_size:
+            current_offset = start_offset
+            for chunk in chunked(urls, batch_size):
+                chunk_dates = crawler.crawl(chunk, since=effective_since, max_workers=max_workers)
+                processed_dates.extend(chunk_dates)
+                current_offset += len(chunk)
+                if resume:
+                    progress_mgr.save_offset(url_file, current_offset)
+        else:
+            processed_dates = crawler.crawl(urls, since=effective_since, max_workers=max_workers)
 
     if processed_dates:
         latest_date = max(processed_dates)
@@ -198,7 +213,7 @@ def crawl(
     else:
         typer.echo("No articles processed; state file unchanged.")
 
-    if resume:
+    if resume and not batch_size:
         progress_mgr.save_offset(url_file, start_offset + len(urls))
 
 
