@@ -172,7 +172,21 @@ def crawl(
     if url_file.is_dir():
         candidate = url_file / "all.txt"
         if not candidate.exists():
-            raise typer.BadParameter(f"Directory {url_file} does not contain all.txt")
+            dated_dirs = sorted(
+                [child for child in url_file.iterdir() if child.is_dir() and child.name.isdigit()],
+                key=lambda path: path.name,
+            )
+            if not dated_dirs:
+                raise typer.BadParameter(
+                    f"Directory {url_file} does not contain all.txt or any dated subdirectories"
+                )
+            latest = dated_dirs[-1]
+            candidate = latest / "all.txt"
+            if not candidate.exists():
+                raise typer.BadParameter(
+                    f"Directory {latest} does not contain all.txt; specify a valid date folder"
+                )
+            typer.echo(f"Detected latest date directory {latest.name}; using {candidate}")
         url_file = candidate
     state_mgr = StateManager()
     progress_mgr = CrawlProgressManager()
