@@ -151,7 +151,6 @@ def crawl(
     url_file: Path = typer.Argument(..., exists=True, readable=True, help="Path to a URL list file."),
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
-    max_workers: int = typer.Option(DEFAULT_CONCURRENCY, help="Maximum concurrent download workers."),
     max_urls: Optional[int] = typer.Option(None, help="Process at most this many URLs during this run."),
     batch_size: Optional[int] = typer.Option(
         None,
@@ -198,17 +197,30 @@ def crawl(
         return
 
     processed_dates: List[date] = []
-    with ArticleCrawler(SOURCES, output_dir=ARTICLES_DIR, max_workers=max_workers) as crawler:
-        if batch_size:
-            current_offset = start_offset
-            for chunk in chunked(urls, batch_size):
-                chunk_dates = crawler.crawl(chunk, since=effective_since, max_workers=max_workers)
-                processed_dates.extend(chunk_dates)
-                current_offset += len(chunk)
-                if resume:
-                    progress_mgr.save_offset(url_file, current_offset)
-        else:
-            processed_dates = crawler.crawl(urls, since=effective_since, max_workers=max_workers)
+    total_urls = len(urls)
+    with ArticleCrawler(SOURCES, output_dir=ARTICLES_DIR) as crawler:
+        with typer.progressbar(length=total_urls, label="Crawling URLs") as progress_bar:
+            def advance() -> None:
+                progress_bar.update(1)
+
+            if batch_size:
+                current_offset = start_offset
+                for chunk in chunked(urls, batch_size):
+                    chunk_dates = crawler.crawl(
+                        chunk,
+                        since=effective_since,
+                        progress_callback=advance,
+                    )
+                    processed_dates.extend(chunk_dates)
+                    current_offset += len(chunk)
+                    if resume:
+                        progress_mgr.save_offset(url_file, current_offset)
+            else:
+                processed_dates = crawler.crawl(
+                    urls,
+                    since=effective_since,
+                    progress_callback=advance,
+                )
 
     if processed_dates:
         latest_date = max(processed_dates)
@@ -290,7 +302,13 @@ def crawl_today(
         return
 
     with ArticleCrawler(selected_sources, output_dir=ARTICLES_DIR, max_workers=max_workers) as crawler:
-        processed_dates = crawler.crawl(deduped_urls, since=target, max_workers=max_workers)
+        with typer.progressbar(length=len(deduped_urls), label="Crawling URLs") as progress_bar:
+            processed_dates = crawler.crawl(
+                deduped_urls,
+                since=target,
+                max_workers=max_workers,
+                progress_callback=lambda: progress_bar.update(1),
+            )
 
     if processed_dates:
         typer.echo(

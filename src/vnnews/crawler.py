@@ -5,7 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -67,6 +67,7 @@ class ArticleCrawler:
         urls: Iterable[str],
         since: date,
         max_workers: Optional[int] = None,
+        progress_callback: Optional[Callable[[], None]] = None,
     ) -> List[date]:
         url_mapping = self._group_urls_by_source(urls)
         processed_dates: List[date] = []
@@ -81,9 +82,13 @@ class ArticleCrawler:
                     result = future.result()
                 except Exception as exc:  # pragma: no cover - logging path
                     logger.error("Error while crawling article: %s", exc, exc_info=True)
-                    continue
-                if result:
-                    processed_dates.append(result)
+                    result = None
+                else:
+                    if result:
+                        processed_dates.append(result)
+                finally:
+                    if progress_callback:
+                        progress_callback()
         return processed_dates
 
     def _group_urls_by_source(self, urls: Iterable[str]) -> Dict[str, List[str]]:

@@ -8,6 +8,7 @@ Python 3.12 module for collecting Vietnam news article URLs via sitemaps and cra
 - Recursively parses sitemap indexes, handles `.gz` sitemaps, and filters entries by date.
 - Collects deduplicated URL lists per source plus a combined list under `data/url_lists/{YYYYMMDD}/`.
 - Crawls article content with [`news-please`](https://github.com/fhamborg/news-please), saving JSON payloads to `data/articles/{source}/{YYYY}/{YYYY-MM-DD}/`.
+- Crawl commands display interactive progress bars so long runs are easy to monitor.
 - Persists crawl checkpoints in `data/state/last_run.json` and supports `--resume`/`--reset-state` options.
 - Threaded crawling with retry/backoff, logging, and robots.txt compliance.
 
@@ -63,10 +64,12 @@ Options:
 ### Crawl Articles
 
 ```bash
-vnnews crawl data/url_lists/20240101/cafef.txt --max-workers 8 --max-urls 500
+vnnews crawl data/url_lists/20240101/cafef.txt --max-urls 500
 ```
 
-Options mirror `collect-urls`, plus `--max-workers` to control concurrency. The crawler stores the newest processed article date in `data/state/last_run.json`.
+Options mirror `collect-urls`. The crawler runs sequentially, so the progress bar advances linearly while storing the newest processed article date in `data/state/last_run.json`.
+
+All crawl invocations show a progress bar that advances as each URL finishes downloading.
 
 Batching-specific options:
 
