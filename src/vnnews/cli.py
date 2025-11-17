@@ -148,7 +148,12 @@ def collect_urls(
 
 @app.command("crawl")
 def crawl(
-    url_file: Path = typer.Argument(..., exists=True, readable=True, help="Path to a URL list file."),
+    url_file: Path = typer.Argument(
+        ...,
+        exists=True,
+        readable=True,
+        help="Path to a URL list file (or a date folder containing all.txt).",
+    ),
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
     max_urls: Optional[int] = typer.Option(None, help="Process at most this many URLs during this run."),
@@ -164,6 +169,11 @@ def crawl(
     Download article content from a URL list and persist JSON payloads.
     """
     url_file = url_file.resolve()
+    if url_file.is_dir():
+        candidate = url_file / "all.txt"
+        if not candidate.exists():
+            raise typer.BadParameter(f"Directory {url_file} does not contain all.txt")
+        url_file = candidate
     state_mgr = StateManager()
     progress_mgr = CrawlProgressManager()
     if reset_state:
