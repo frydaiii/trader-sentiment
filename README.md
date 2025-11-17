@@ -25,7 +25,10 @@ pip install -e .
 ```bash
 vnnews --help
 vnnews-sentiment --help
+vnnews --quiet collect-urls --source cafef
 ```
+
+Use `--quiet` before any command to suppress info-level log output.
 
 ### Split Sentences
 

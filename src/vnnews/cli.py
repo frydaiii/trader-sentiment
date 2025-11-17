@@ -39,6 +39,15 @@ logging.basicConfig(
 app = typer.Typer(help="Vietnam news sitemap collector and crawler.")
 
 
+@app.callback()
+def main(
+    ctx: typer.Context,
+    quiet: bool = typer.Option(False, "--quiet", help="Silence info-level logs (warnings/errors remain)."),
+) -> None:
+    if quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+
+
 def _select_sources(source_names: List[str]) -> List[SourceConfig]:
     if not source_names:
         return SOURCES
