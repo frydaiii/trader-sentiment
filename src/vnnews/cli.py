@@ -157,6 +157,11 @@ def crawl(
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
     max_urls: Optional[int] = typer.Option(None, help="Process at most this many URLs during this run."),
+    source_name: Optional[str] = typer.Option(
+        None,
+        "--source",
+        help="When pointing to a date directory, crawl only this source's URL list (e.g., cafef).",
+    ),
     batch_size: Optional[int] = typer.Option(
         None,
         min=1,
@@ -169,25 +174,35 @@ def crawl(
     Download article content from a URL list and persist JSON payloads.
     """
     url_file = url_file.resolve()
+    selected_source = source_name
     if url_file.is_dir():
-        candidate = url_file / "all.txt"
+        target_dir = url_file
+        candidate = target_dir / "all.txt"
         if not candidate.exists():
             dated_dirs = sorted(
-                [child for child in url_file.iterdir() if child.is_dir() and child.name.isdigit()],
+                [child for child in target_dir.iterdir() if child.is_dir() and child.name.isdigit()],
                 key=lambda path: path.name,
             )
             if not dated_dirs:
                 raise typer.BadParameter(
-                    f"Directory {url_file} does not contain all.txt or any dated subdirectories"
+                    f"Directory {target_dir} does not contain all.txt or any dated subdirectories"
                 )
-            latest = dated_dirs[-1]
-            candidate = latest / "all.txt"
+            target_dir = dated_dirs[-1]
+            candidate = target_dir / "all.txt"
+            typer.echo(f"Detected latest date directory {target_dir.name}; using {candidate}")
             if not candidate.exists():
                 raise typer.BadParameter(
-                    f"Directory {latest} does not contain all.txt; specify a valid date folder"
+                    f"Directory {target_dir} does not contain all.txt; specify a valid date folder"
                 )
-            typer.echo(f"Detected latest date directory {latest.name}; using {candidate}")
+        if selected_source:
+            candidate = target_dir / f"{selected_source}.txt"
+            if not candidate.exists():
+                raise typer.BadParameter(
+                    f"Source '{selected_source}' does not have a URL list under {target_dir}"
+                )
         url_file = candidate
+    elif selected_source:
+        raise typer.BadParameter("--source can only be used when specifying a directory of URL lists")
     state_mgr = StateManager()
     progress_mgr = CrawlProgressManager()
     if reset_state:

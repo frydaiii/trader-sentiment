@@ -67,9 +67,10 @@ Options:
 vnnews crawl data/url_lists/20240101/cafef.txt --max-urls 500
 vnnews crawl data/url_lists/20240101 --max-urls 500      # auto-loads all.txt
 vnnews crawl data/url_lists --max-urls 500               # auto-loads newest date/all.txt
+vnnews crawl data/url_lists --source cafef --max-urls 200 # newest date, cafef.txt only
 ```
 
-Options mirror `collect-urls`. The crawler runs sequentially, so the progress bar advances linearly while storing the newest processed article date in `data/state/last_run.json`. Passing a date folder automatically loads its `all.txt`, and pointing to `data/url_lists/` picks the most recent dated subdirectory automatically.
+Options mirror `collect-urls`. The crawler runs sequentially, so the progress bar advances linearly while storing the newest processed article date in `data/state/last_run.json`. Passing a date folder automatically loads its `all.txt`, pointing to `data/url_lists/` picks the most recent dated subdirectory automatically, and `--source NAME` lets you grab a single `{NAME}.txt` file from that directory instead of `all.txt`.
 
 All crawl invocations show a progress bar that advances as each URL finishes downloading.
 
