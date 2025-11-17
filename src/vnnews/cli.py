@@ -138,8 +138,12 @@ def collect_urls(
                 next_cutoff = boundary_date - timedelta(days=1)
                 collection_state.save_until(source.name, next_cutoff)
 
-    combined_path = write_url_lists(results, timestamp_slug)
-    typer.echo(f"Combined URL list saved to {combined_path}")
+    combined_paths = write_url_lists(results, timestamp_slug)
+    if not combined_paths:
+        typer.echo("No combined URL lists were created.")
+    else:
+        for slug, path in sorted(combined_paths.items()):
+            typer.echo(f"Combined URL list for {slug} saved to {path}")
 
 
 @app.command("crawl")
@@ -265,11 +269,18 @@ def crawl_today(
         typer.echo(f"No URLs found for {target.isoformat()} across the selected sources.")
         return
 
-    combined_path = write_url_lists(results, timestamp_slug)
-    typer.echo(
-        f"Collected {len(collected_urls)} URLs for {target.isoformat()}. "
-        f"Combined list saved to {combined_path}"
-    )
+    combined_paths = write_url_lists(results, timestamp_slug)
+    target_slug = target.strftime("%Y%m%d")
+    target_path = combined_paths.get(target_slug)
+    if target_path:
+        typer.echo(
+            f"Collected {len(collected_urls)} URLs for {target.isoformat()}. "
+            f"Combined list saved to {target_path}"
+        )
+    else:
+        typer.echo(
+            f"Collected {len(collected_urls)} URLs for {target.isoformat()}, but no combined file was generated."
+        )
 
     deduped_urls = list(dict.fromkeys(collected_urls))
     if max_urls:

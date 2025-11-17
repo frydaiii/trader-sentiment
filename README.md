@@ -6,7 +6,7 @@ Python 3.12 module for collecting Vietnam news article URLs via sitemaps and cra
 
 - Discovers sitemap URLs automatically from `robots.txt`.
 - Recursively parses sitemap indexes, handles `.gz` sitemaps, and filters entries by date.
-- Collects deduplicated URL lists per source plus a combined list under `data/url_lists/`.
+- Collects deduplicated URL lists per source plus a combined list under `data/url_lists/{YYYYMMDD}/`.
 - Crawls article content with [`news-please`](https://github.com/fhamborg/news-please), saving JSON payloads to `data/articles/{source}/{YYYY}/{YYYY-MM-DD}/`.
 - Persists crawl checkpoints in `data/state/last_run.json` and supports `--resume`/`--reset-state` options.
 - Threaded crawling with retry/backoff, logging, and robots.txt compliance.
@@ -45,8 +45,10 @@ vnnews collect-urls --source cafef --source cafebiz --since-years 3 --batch-days
 
 Outputs:
 
-- `data/url_lists/{source}-{YYYYMMDD}.txt`
-- `data/url_lists/all-{YYYYMMDD}.txt`
+- `data/url_lists/{YYYYMMDD}/{source}.txt`
+- `data/url_lists/{YYYYMMDD}/all.txt`
+
+Each `YYYYMMDD` folder corresponds to an article publish date detected from sitemap `lastmod` values. Entries without a publish date fall back to the collection run's date.
 
 Options:
 
@@ -61,7 +63,7 @@ Options:
 ### Crawl Articles
 
 ```bash
-vnnews crawl data/url_lists/cafef-20240101.txt --max-workers 8 --max-urls 500
+vnnews crawl data/url_lists/20240101/cafef.txt --max-workers 8 --max-urls 500
 ```
 
 Options mirror `collect-urls`, plus `--max-workers` to control concurrency. The crawler stores the newest processed article date in `data/state/last_run.json`.
@@ -87,7 +89,7 @@ vnnews crawl-today --source cafef --max-workers 8
 - `--max-workers N` – control crawler concurrency.
 - `--max-urls N` – stop after crawling the first N URLs discovered for the day.
 
-This command stores the collected URL lists under `data/url_lists/` (one file per source plus `all-YYYYMMDD.txt`) and writes crawled articles to `data/articles/...`.
+This command stores the collected URL lists under `data/url_lists/{YYYYMMDD}/` (one file per source plus `all.txt`) and writes crawled articles to `data/articles/...`.
 
 ### Sentiment Scoring
 

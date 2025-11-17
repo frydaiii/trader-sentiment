@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, List, Sequence
 
 from .config import URL_LIST_DIR
 from .config import SourceConfig
-from .sitemap_client import SitemapClient, UrlEntry
+from .sitemap_client import SitemapClient
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 class CollectionResult:
     source: SourceConfig
     urls: List[str]
+    url_entries: List[tuple[str, date | None]]
     earliest_date: date | None
     latest_date: date | None
     sitemaps_fetched: int
@@ -60,7 +62,9 @@ class ArticleURLCollector:
                 latest_date = entry_date if not latest_date or entry_date > latest_date else latest_date
             dedup[entry.loc] = lastmod
 
-        sorted_urls = [url for url, _ in sorted(dedup.items(), key=self._sort_key, reverse=True)]
+        sorted_entries = list(sorted(dedup.items(), key=self._sort_key, reverse=True))
+        sorted_urls = [url for url, _ in sorted_entries]
+        url_entries = [(url, lastmod.date() if lastmod else None) for url, lastmod in sorted_entries]
         logger.info(
             "Source %s -> %d urls collected (from %d sitemap entries, %d sitemaps fetched)",
             source.name,
@@ -71,6 +75,7 @@ class ArticleURLCollector:
         return CollectionResult(
             source=source,
             urls=sorted_urls,
+            url_entries=url_entries,
             earliest_date=earliest_date,
             latest_date=latest_date,
             sitemaps_fetched=self._client.last_stats().documents_fetched,
@@ -82,21 +87,38 @@ class ArticleURLCollector:
         return lastmod or datetime.min
 
 
-def write_url_lists(results: Sequence[CollectionResult], timestamp_slug: str) -> Path:
+def write_url_lists(results: Sequence[CollectionResult], timestamp_slug: str) -> Dict[str, Path]:
     URL_LIST_DIR.mkdir(parents=True, exist_ok=True)
-    combined_path = URL_LIST_DIR / f"all-{timestamp_slug}.txt"
-    combined_urls: List[str] = []
+    per_source: Dict[tuple[str, str], List[str]] = defaultdict(list)
+    combined: Dict[str, List[str]] = defaultdict(list)
     for result in results:
-        if not result.urls:
+        if not result.url_entries:
             continue
-        source_path = URL_LIST_DIR / f"{result.source.name}-{timestamp_slug}.txt"
-        source_path.write_text("\n".join(result.urls), encoding="utf-8")
-        logger.info("Saved %d urls to %s", len(result.urls), source_path)
-        combined_urls.extend(result.urls)
-    if combined_urls:
-        deduped_combined = list(dict.fromkeys(combined_urls))
+        for url, entry_date in result.url_entries:
+            slug = entry_date.strftime("%Y%m%d") if entry_date else timestamp_slug
+            key = (result.source.name, slug)
+            per_source[key].append(url)
+            combined[slug].append(url)
+
+    if not combined:
+        logger.warning("No URLs collected for any source; combined lists not created")
+        return {}
+
+    combined_paths: Dict[str, Path] = {}
+    for (source_name, slug), urls in per_source.items():
+        day_dir = URL_LIST_DIR / slug
+        day_dir.mkdir(parents=True, exist_ok=True)
+        deduped_urls = list(dict.fromkeys(urls))
+        source_path = day_dir / f"{source_name}.txt"
+        source_path.write_text("\n".join(deduped_urls), encoding="utf-8")
+        logger.info("Saved %d urls to %s", len(deduped_urls), source_path)
+
+    for slug, urls in combined.items():
+        day_dir = URL_LIST_DIR / slug
+        deduped_combined = list(dict.fromkeys(urls))
+        combined_path = day_dir / "all.txt"
         combined_path.write_text("\n".join(deduped_combined), encoding="utf-8")
         logger.info("Saved %d combined urls to %s", len(deduped_combined), combined_path)
-    else:
-        logger.warning("No URLs collected for any source; combined list not created")
-    return combined_path
+        combined_paths[slug] = combined_path
+
+    return combined_paths
