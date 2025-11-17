@@ -157,11 +157,11 @@ def collect_urls(
 
 @app.command("crawl")
 def crawl(
-    url_file: Path = typer.Argument(
+    data_path: Path = typer.Argument(
         ...,
         exists=True,
         readable=True,
-        help="Path to a URL list file (or a date folder containing all.txt).",
+        help="Path to a data directory or URL list file (auto-detects data/url_lists/<date>).",
     ),
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
@@ -182,19 +182,31 @@ def crawl(
     """
     Download article content from a URL list and persist JSON payloads.
     """
-    url_file = url_file.resolve()
-    selected_source = source_name
-    if url_file.is_dir():
-        target_dir = url_file
+    data_path = data_path.resolve()
+    source_label = source_name.strip() if source_name else None
+    selected_source_slug = source_label.lower() if source_label else None
+
+    def _resolve_url_list_file(path: Path) -> Path:
+        if path.is_file():
+            if selected_source_slug:
+                raise typer.BadParameter("--source can only be used when specifying a directory of URL lists")
+            return path
+
+        search_dir = path
+        url_lists_dir = search_dir / "url_lists"
+        if url_lists_dir.is_dir():
+            search_dir = url_lists_dir
+
+        target_dir = search_dir
         candidate = target_dir / "all.txt"
         if not candidate.exists():
             dated_dirs = sorted(
                 [child for child in target_dir.iterdir() if child.is_dir() and child.name.isdigit()],
-                key=lambda path: path.name,
+                key=lambda child: child.name,
             )
             if not dated_dirs:
                 raise typer.BadParameter(
-                    f"Directory {target_dir} does not contain all.txt or any dated subdirectories"
+                    f"Directory {search_dir} does not contain all.txt or any dated subdirectories"
                 )
             target_dir = dated_dirs[-1]
             candidate = target_dir / "all.txt"
@@ -203,15 +215,25 @@ def crawl(
                 raise typer.BadParameter(
                     f"Directory {target_dir} does not contain all.txt; specify a valid date folder"
                 )
-        if selected_source:
-            candidate = target_dir / f"{selected_source}.txt"
+
+        if selected_source_slug:
+            candidate = target_dir / f"{selected_source_slug}.txt"
             if not candidate.exists():
                 raise typer.BadParameter(
-                    f"Source '{selected_source}' does not have a URL list under {target_dir}"
+                    f"Source '{source_label}' does not have a URL list under {target_dir}"
                 )
-        url_file = candidate
-    elif selected_source:
-        raise typer.BadParameter("--source can only be used when specifying a directory of URL lists")
+        return candidate
+
+    url_file = _resolve_url_list_file(data_path)
+    crawler_sources = SOURCES
+    if selected_source_slug:
+        matching_sources = [src for src in SOURCES if src.name.lower() == selected_source_slug]
+        if not matching_sources:
+            available = ", ".join(src.name for src in SOURCES)
+            raise typer.BadParameter(
+                f"Unknown source '{source_label}'. Available options: {available}"
+            )
+        crawler_sources = matching_sources
     state_mgr = StateManager()
     progress_mgr = CrawlProgressManager()
     if reset_state:
@@ -247,7 +269,7 @@ def crawl(
     processed_dates: List[date] = []
     total_urls = len(urls)
     completed_urls = 0
-    with ArticleCrawler(SOURCES, output_dir=ARTICLES_DIR) as crawler:
+    with ArticleCrawler(crawler_sources, output_dir=ARTICLES_DIR) as crawler:
         with typer.progressbar(length=total_urls, label="Crawling URLs") as progress_bar:
             def advance() -> None:
                 nonlocal completed_urls
