@@ -6,7 +6,7 @@ Python 3.12 module for collecting Vietnam news article URLs via sitemaps and cra
 
 - Discovers sitemap URLs automatically from `robots.txt`.
 - Recursively parses sitemap indexes, handles `.gz` sitemaps, and filters entries by date.
-- Collects deduplicated URL lists per source plus a combined list under `data/url_lists/{YYYYMMDD}/`.
+- Collects deduplicated URL lists per source plus combined lists under `data/url_list/{source}/{YYYYMMDD}.txt` (including `all`).
 - Crawls article content with [`news-please`](https://github.com/fhamborg/news-please), saving JSON payloads to `data/articles/{source}/{YYYY}/{YYYY-MM-DD}/`.
 - Crawl commands display interactive progress bars so long runs are easy to monitor.
 - Persists crawl checkpoints in `data/state/last_run.json` and supports `--resume`/`--reset-state` options.
@@ -49,8 +49,8 @@ vnnews collect-urls --source cafef --source cafebiz --since-years 3 --batch-days
 
 Outputs:
 
-- `data/url_lists/{YYYYMMDD}/{source}.txt`
-- `data/url_lists/{YYYYMMDD}/all.txt`
+- `data/url_list/{source}/{YYYYMMDD}.txt` for each source
+- `data/url_list/all/{YYYYMMDD}.txt` with the combined deduplicated URLs
 
 Each `YYYYMMDD` folder corresponds to an article publish date detected from sitemap `lastmod` values. Entries without a publish date fall back to the collection run's date.
 
@@ -67,13 +67,12 @@ Options:
 ### Crawl Articles
 
 ```bash
-vnnews crawl data/url_lists/20240101/cafef.txt --max-urls 500
-vnnews crawl data/url_lists/20240101 --max-urls 500      # auto-loads all.txt
-vnnews crawl data/url_lists --max-urls 500               # auto-loads newest date/all.txt
-vnnews crawl data/url_lists --source cafef --max-urls 200 # newest date, cafef.txt only
+vnnews crawl data/url_list/cafef/20240101.txt --max-urls 500
+vnnews crawl data/url_list --max-urls 500               # latest combined list under all/
+vnnews crawl data/url_list --source cafef --max-urls 200 # newest cafef list auto-selected
 ```
 
-Options mirror `collect-urls`. The crawler runs sequentially, so the progress bar advances linearly while storing the newest processed article date in `data/state/last_run.json`. Passing a date folder automatically loads its `all.txt`, pointing to `data/url_lists/` picks the most recent dated subdirectory automatically, and `--source NAME` lets you grab a single `{NAME}.txt` file from that directory instead of `all.txt`.
+Options mirror `collect-urls`. The crawler runs sequentially, so the progress bar advances linearly while storing the newest processed article date in `data/state/last_run.json`. Pointing at `data/url_list/` auto-detects the newest dated file under `all/` (or the requested `--source` directory), and you can still pass an explicit `.txt` file path to override the selection.
 
 All crawl invocations show a progress bar that advances as each URL finishes downloading.
 
@@ -98,7 +97,7 @@ vnnews crawl-today --source cafef --max-workers 8
 - `--max-workers N` – control crawler concurrency.
 - `--max-urls N` – stop after crawling the first N URLs discovered for the day.
 
-This command stores the collected URL lists under `data/url_lists/{YYYYMMDD}/` (one file per source plus `all.txt`) and writes crawled articles to `data/articles/...`.
+This command stores the collected URL lists under `data/url_list/{source}/{YYYYMMDD}.txt` (including an `all/` bucket) and writes crawled articles to `data/articles/...`.
 
 ### Sentiment Scoring
 

@@ -163,7 +163,7 @@ def crawl(
         ...,
         exists=True,
         readable=True,
-        help="Path to a data directory or URL list file (auto-detects data/url_lists/<date>).",
+        help="Path to a URL list file or directory (auto-detects data/url_list/<source>/<date>.txt).",
     ),
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
@@ -194,37 +194,71 @@ def crawl(
                 raise typer.BadParameter("--source can only be used when specifying a directory of URL lists")
             return path
 
-        search_dir = path
-        url_lists_dir = search_dir / "url_lists"
-        if url_lists_dir.is_dir():
-            search_dir = url_lists_dir
+        def _latest_txt_file(directory: Path) -> Path:
+            txt_files = sorted([candidate for candidate in directory.glob("*.txt") if candidate.is_file()])
+            if not txt_files:
+                raise typer.BadParameter(f"Directory {directory} does not contain any .txt URL lists")
+            return txt_files[-1]
 
-        target_dir = search_dir
-        candidate = target_dir / "all.txt"
-        if not candidate.exists():
-            dated_dirs = sorted(
-                [child for child in target_dir.iterdir() if child.is_dir() and child.name.isdigit()],
-                key=lambda child: child.name,
-            )
-            if not dated_dirs:
-                raise typer.BadParameter(
-                    f"Directory {search_dir} does not contain all.txt or any dated subdirectories"
-                )
-            target_dir = dated_dirs[-1]
+        def _resolve_legacy_layout(search_dir: Path, legacy_dirs: Optional[List[Path]] = None) -> Path:
+            target_dir = search_dir
             candidate = target_dir / "all.txt"
-            typer.echo(f"Detected latest date directory {target_dir.name}; using {candidate}")
             if not candidate.exists():
-                raise typer.BadParameter(
-                    f"Directory {target_dir} does not contain all.txt; specify a valid date folder"
+                dated_dirs = sorted(
+                    legacy_dirs
+                    if legacy_dirs is not None
+                    else [child for child in target_dir.iterdir() if child.is_dir() and child.name.isdigit()],
+                    key=lambda child: child.name,
                 )
+                if not dated_dirs:
+                    raise typer.BadParameter(
+                        f"Directory {search_dir} does not contain per-source folders or dated subdirectories"
+                    )
+                target_dir = dated_dirs[-1]
+                candidate = target_dir / "all.txt"
+                typer.echo(f"Detected latest date directory {target_dir.name}; using {candidate}")
+                if not candidate.exists():
+                    raise typer.BadParameter(
+                        f"Directory {target_dir} does not contain all.txt; specify a valid date folder"
+                    )
 
+            if selected_source_slug:
+                source_candidate = target_dir / f"{selected_source_slug}.txt"
+                if not source_candidate.exists():
+                    raise typer.BadParameter(
+                        f"Source '{source_label}' does not have a URL list under {target_dir}"
+                    )
+                return source_candidate
+            return candidate
+
+        search_dir = path
+        for folder_name in ("url_list", "url_lists"):
+            candidate_dir = search_dir / folder_name
+            if candidate_dir.is_dir():
+                search_dir = candidate_dir
+                break
+
+        bucket_dirs: List[Path] = []
         if selected_source_slug:
-            candidate = target_dir / f"{selected_source_slug}.txt"
-            if not candidate.exists():
-                raise typer.BadParameter(
-                    f"Source '{source_label}' does not have a URL list under {target_dir}"
-                )
-        return candidate
+            if search_dir.name == selected_source_slug:
+                bucket_dirs.append(search_dir)
+            bucket_dirs.append(search_dir / selected_source_slug)
+        else:
+            if search_dir.name == "all":
+                bucket_dirs.append(search_dir)
+            bucket_dirs.append(search_dir / "all")
+
+        for bucket_dir in bucket_dirs:
+            if bucket_dir.is_dir():
+                return _latest_txt_file(bucket_dir)
+
+        legacy_dirs = [child for child in search_dir.iterdir() if child.is_dir() and child.name.isdigit()]
+        if selected_source_slug and not legacy_dirs:
+            raise typer.BadParameter(
+                f"Source '{source_label}' does not have a directory under {search_dir}. "
+                "Expected data/url_list/<source>/<YYYYMMDD>.txt files."
+            )
+        return _resolve_legacy_layout(search_dir, legacy_dirs=legacy_dirs or None)
 
     url_file = _resolve_url_list_file(data_path)
     crawler_sources = SOURCES

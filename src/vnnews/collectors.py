@@ -106,17 +106,18 @@ def write_url_lists(results: Sequence[CollectionResult], timestamp_slug: str) ->
 
     combined_paths: Dict[str, Path] = {}
     for (source_name, slug), urls in per_source.items():
-        day_dir = URL_LIST_DIR / slug
-        day_dir.mkdir(parents=True, exist_ok=True)
+        source_dir = URL_LIST_DIR / source_name
+        source_dir.mkdir(parents=True, exist_ok=True)
         deduped_urls = list(dict.fromkeys(urls))
-        source_path = day_dir / f"{source_name}.txt"
+        source_path = source_dir / f"{slug}.txt"
         source_path.write_text("\n".join(deduped_urls), encoding="utf-8")
         logger.info("Saved %d urls to %s", len(deduped_urls), source_path)
 
+    all_dir = URL_LIST_DIR / "all"
+    all_dir.mkdir(parents=True, exist_ok=True)
     for slug, urls in combined.items():
-        day_dir = URL_LIST_DIR / slug
         deduped_combined = list(dict.fromkeys(urls))
-        combined_path = day_dir / "all.txt"
+        combined_path = all_dir / f"{slug}.txt"
         combined_path.write_text("\n".join(deduped_combined), encoding="utf-8")
         logger.info("Saved %d combined urls to %s", len(deduped_combined), combined_path)
         combined_paths[slug] = combined_path
