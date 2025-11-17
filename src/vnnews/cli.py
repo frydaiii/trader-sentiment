@@ -32,7 +32,7 @@ from .utils import ensure_parent, chunked
 
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s %(levelname)s %(name)s - %(message)s",
 )
 
@@ -42,10 +42,12 @@ app = typer.Typer(help="Vietnam news sitemap collector and crawler.")
 @app.callback()
 def main(
     ctx: typer.Context,
-    quiet: bool = typer.Option(False, "--quiet", help="Silence info-level logs (warnings/errors remain)."),
+    quiet: bool = typer.Option(False, "--quiet", help="Deprecated; info logs are disabled by default."),
+    verbose: bool = typer.Option(False, "--verbose/--no-verbose", help="Enable info-level logs."),
 ) -> None:
-    if quiet:
-        logging.getLogger().setLevel(logging.WARNING)
+    if quiet and verbose:
+        raise typer.BadParameter("--quiet and --verbose cannot be used together.")
+    logging.getLogger().setLevel(logging.INFO if verbose else logging.WARNING)
 
 
 def _select_sources(source_names: List[str]) -> List[SourceConfig]:
