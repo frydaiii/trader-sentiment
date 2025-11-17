@@ -198,13 +198,17 @@ def crawl(
 
     processed_dates: List[date] = []
     total_urls = len(urls)
+    completed_urls = 0
     with ArticleCrawler(SOURCES, output_dir=ARTICLES_DIR) as crawler:
         with typer.progressbar(length=total_urls, label="Crawling URLs") as progress_bar:
             def advance() -> None:
+                nonlocal completed_urls
+                completed_urls += 1
                 progress_bar.update(1)
+                if resume:
+                    progress_mgr.save_offset(url_file, start_offset + completed_urls)
 
             if batch_size:
-                current_offset = start_offset
                 for chunk in chunked(urls, batch_size):
                     chunk_dates = crawler.crawl(
                         chunk,
@@ -212,9 +216,6 @@ def crawl(
                         progress_callback=advance,
                     )
                     processed_dates.extend(chunk_dates)
-                    current_offset += len(chunk)
-                    if resume:
-                        progress_mgr.save_offset(url_file, current_offset)
             else:
                 processed_dates = crawler.crawl(
                     urls,
@@ -229,8 +230,8 @@ def crawl(
     else:
         typer.echo("No articles processed; state file unchanged.")
 
-    if resume and not batch_size:
-        progress_mgr.save_offset(url_file, start_offset + len(urls))
+    if resume:
+        progress_mgr.save_offset(url_file, start_offset + completed_urls)
 
 
 @app.command("crawl-today")

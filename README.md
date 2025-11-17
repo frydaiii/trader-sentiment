@@ -75,7 +75,7 @@ Batching-specific options:
 
 - `--max-urls N` – crawl only the next `N` URLs from the list. Combined with `--resume`, progress is tracked per file in `data/state/crawl_progress.json` so subsequent runs continue where the previous batch stopped.
 - `--batch-size N` – process URLs in chunks of `N`, saving resume offsets after each batch so long runs can be resumed mid-file.
-- `--resume/--no-resume` – also governs whether URL offsets and batch checkpoints are honored.
+- `--resume/--no-resume` – also governs whether URL offsets and batch checkpoints are honored; offsets are flushed after every processed URL so you can interrupt safely and continue later.
 - `--reset-state` – clears both the crawl date checkpoint (`last_run.json`) and the URL offset file.
 
 ### Crawl Today's Articles
