@@ -217,6 +217,79 @@ def crawl(
         progress_mgr.save_offset(url_file, start_offset + len(urls))
 
 
+@app.command("crawl-today")
+def crawl_today(
+    sources: List[str] = typer.Option([], "--source", help="Filter to one or more source names."),
+    target_date: Optional[str] = typer.Option(
+        None,
+        "--date",
+        help="Override the target day to collect and crawl (YYYY-MM-DD). Defaults to today.",
+    ),
+    max_sitemaps_per_source: Optional[int] = typer.Option(
+        None,
+        help="Limit number of sitemap documents fetched per source during this run.",
+    ),
+    max_workers: int = typer.Option(DEFAULT_CONCURRENCY, help="Maximum concurrent download workers."),
+    max_urls: Optional[int] = typer.Option(
+        None,
+        min=1,
+        help="Process at most this many URLs after collection (per run).",
+    ),
+) -> None:
+    """
+    Collect sitemap URLs for a single day (today by default) and immediately crawl them.
+    """
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    URL_LIST_DIR.mkdir(parents=True, exist_ok=True)
+    ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
+
+    selected_sources = _select_sources(sources)
+    target = _parse_date_option(target_date) or date.today()
+    timestamp_slug = target.strftime("%Y%m%d")
+
+    results: List[CollectionResult] = []
+    with SitemapClient() as sitemap_client:
+        collector = ArticleURLCollector(sitemap_client)
+        for source in selected_sources:
+            result = collector.collect_for_source(
+                source=source,
+                since=target,
+                until=target,
+                max_sitemaps=max_sitemaps_per_source,
+            )
+            results.append(result)
+
+    collected_urls = [url for result in results for url in result.urls]
+    if not collected_urls:
+        typer.echo(f"No URLs found for {target.isoformat()} across the selected sources.")
+        return
+
+    combined_path = write_url_lists(results, timestamp_slug)
+    typer.echo(
+        f"Collected {len(collected_urls)} URLs for {target.isoformat()}. "
+        f"Combined list saved to {combined_path}"
+    )
+
+    deduped_urls = list(dict.fromkeys(collected_urls))
+    if max_urls:
+        deduped_urls = deduped_urls[:max_urls]
+    if not deduped_urls:
+        typer.echo("No URLs selected for crawling after applying limits.")
+        return
+
+    with ArticleCrawler(selected_sources, output_dir=ARTICLES_DIR, max_workers=max_workers) as crawler:
+        processed_dates = crawler.crawl(deduped_urls, since=target, max_workers=max_workers)
+
+    if processed_dates:
+        typer.echo(
+            f"Crawled {len(processed_dates)} articles for {target.isoformat()}. "
+            f"Outputs stored under {ARTICLES_DIR}"
+        )
+    else:
+        typer.echo("No articles processed.")
+
+
 @app.command("split-sentences")
 def split_sentences(
     article_path: Path = typer.Argument(..., exists=True, readable=True, help="Path to a crawler-generated JSON file."),

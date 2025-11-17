@@ -73,6 +73,22 @@ Batching-specific options:
 - `--resume/--no-resume` – also governs whether URL offsets and batch checkpoints are honored.
 - `--reset-state` – clears both the crawl date checkpoint (`last_run.json`) and the URL offset file.
 
+### Crawl Today's Articles
+
+Need a single command that grabs today's sitemap entries and crawls them immediately? Use:
+
+```bash
+vnnews crawl-today --source cafef --max-workers 8
+```
+
+- `--source NAME` – specify one or more sources (defaults to all defined in `vnnews.config.SOURCES`).
+- `--date YYYY-MM-DD` – override the target day (defaults to the current date).
+- `--max-sitemaps-per-source N` – throttle sitemap discovery per source.
+- `--max-workers N` – control crawler concurrency.
+- `--max-urls N` – stop after crawling the first N URLs discovered for the day.
+
+This command stores the collected URL lists under `data/url_lists/` (one file per source plus `all-YYYYMMDD.txt`) and writes crawled articles to `data/articles/...`.
+
 ### Sentiment Scoring
 
 Set `OPENAI_API_KEY` in your environment, then run:
