@@ -305,30 +305,35 @@ def crawl(
     processed_dates: List[date] = []
     total_urls = len(urls)
     completed_urls = 0
+    
+    typer.echo(f"Starting to crawl {total_urls} URLs...")
     with ArticleCrawler(crawler_sources, output_dir=ARTICLES_DIR) as crawler:
-        with typer.progressbar(length=total_urls, label="Crawling URLs") as progress_bar:
-            def advance() -> None:
-                nonlocal completed_urls
-                completed_urls += 1
-                progress_bar.update(1)
-                if resume:
-                    progress_mgr.save_offset(url_file, start_offset + completed_urls)
+        def advance(url: str) -> None:
+            nonlocal completed_urls
+            completed_urls += 1
+            if resume:
+                progress_mgr.save_offset(url_file, start_offset + completed_urls)
+            # Use carriage return to overwrite the same line
+            typer.echo(f"\r[{completed_urls}/{total_urls}] {url}", nl=False)
 
-            if batch_size:
-                for chunk in chunked(urls, batch_size):
-                    chunk_dates = crawler.crawl(
-                        chunk,
-                        since=effective_since,
-                        progress_callback=advance,
-                    )
-                    processed_dates.extend(chunk_dates)
-            else:
-                processed_dates = crawler.crawl(
-                    urls,
+        if batch_size:
+            for chunk in chunked(urls, batch_size):
+                chunk_dates = crawler.crawl(
+                    chunk,
                     since=effective_since,
                     progress_callback=advance,
                 )
+                processed_dates.extend(chunk_dates)
+        else:
+            processed_dates = crawler.crawl(
+                urls,
+                since=effective_since,
+                progress_callback=advance,
+            )
 
+    # Print newline after progress display
+    typer.echo("")
+    
     if processed_dates:
         latest_date = max(processed_dates)
         state_mgr.save(latest_date)
@@ -414,7 +419,7 @@ def crawl_today(
                 deduped_urls,
                 since=target,
                 max_workers=max_workers,
-                progress_callback=lambda: progress_bar.update(1),
+                progress_callback=lambda url: progress_bar.update(1),
             )
 
     if processed_dates:

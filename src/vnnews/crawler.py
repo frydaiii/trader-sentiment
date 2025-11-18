@@ -67,17 +67,19 @@ class ArticleCrawler:
         urls: Iterable[str],
         since: date,
         max_workers: Optional[int] = None,
-        progress_callback: Optional[Callable[[], None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> List[date]:
         url_mapping = self._group_urls_by_source(urls)
         processed_dates: List[date] = []
         workers = max_workers or self._max_workers
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = []
+            futures = {}
             for source, source_urls in url_mapping.items():
                 for url in source_urls:
-                    futures.append(executor.submit(self._process_single, source, url, since))
+                    future = executor.submit(self._process_single, source, url, since)
+                    futures[future] = url
             for future in as_completed(futures):
+                url = futures[future]
                 try:
                     result = future.result()
                 except Exception as exc:  # pragma: no cover - logging path
@@ -88,7 +90,7 @@ class ArticleCrawler:
                         processed_dates.append(result)
                 finally:
                     if progress_callback:
-                        progress_callback()
+                        progress_callback(url)
         return processed_dates
 
     def _group_urls_by_source(self, urls: Iterable[str]) -> Dict[str, List[str]]:
