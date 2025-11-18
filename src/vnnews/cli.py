@@ -163,16 +163,11 @@ def crawl(
         ...,
         exists=True,
         readable=True,
-        help="Path to a URL list file or directory (auto-detects data/url_list/<source>/<date>.txt).",
+        help="Path to a URL list file or directory containing .txt URL list files.",
     ),
     since_date: Optional[str] = typer.Option(None, help="Crawl only articles on/after this YYYY-MM-DD date."),
     since_years: int = typer.Option(DEFAULT_SINCE_YEARS, help="Fallback look-back window when no date is provided."),
     max_urls: Optional[int] = typer.Option(None, help="Process at most this many URLs during this run."),
-    source_name: Optional[str] = typer.Option(
-        None,
-        "--source",
-        help="When pointing to a date directory, crawl only this source's URL list (e.g., cafef).",
-    ),
     batch_size: Optional[int] = typer.Option(
         None,
         min=1,
@@ -182,94 +177,24 @@ def crawl(
     reset_state: bool = typer.Option(False, help="Clear saved state before running."),
 ) -> None:
     """
-    Download article content from a URL list and persist JSON payloads.
+    Download article content from URL list files and persist JSON payloads.
     """
     data_path = data_path.resolve()
-    source_label = source_name.strip() if source_name else None
-    selected_source_slug = source_label.lower() if source_label else None
 
-    def _resolve_url_list_file(path: Path) -> Path:
+    def _collect_url_list_files(path: Path) -> List[Path]:
         if path.is_file():
-            if selected_source_slug:
-                raise typer.BadParameter("--source can only be used when specifying a directory of URL lists")
-            return path
+            return [path]
 
-        def _latest_txt_file(directory: Path) -> Path:
-            txt_files = sorted([candidate for candidate in directory.glob("*.txt") if candidate.is_file()])
-            if not txt_files:
-                raise typer.BadParameter(f"Directory {directory} does not contain any .txt URL lists")
-            return txt_files[-1]
+        # Collect all .txt files in the directory
+        txt_files = sorted([f for f in path.glob("*.txt") if f.is_file()])
+        if not txt_files:
+            raise typer.BadParameter(f"Directory {path} does not contain any .txt URL list files")
+        return txt_files
 
-        def _resolve_legacy_layout(search_dir: Path, legacy_dirs: Optional[List[Path]] = None) -> Path:
-            target_dir = search_dir
-            candidate = target_dir / "all.txt"
-            if not candidate.exists():
-                dated_dirs = sorted(
-                    legacy_dirs
-                    if legacy_dirs is not None
-                    else [child for child in target_dir.iterdir() if child.is_dir() and child.name.isdigit()],
-                    key=lambda child: child.name,
-                )
-                if not dated_dirs:
-                    raise typer.BadParameter(
-                        f"Directory {search_dir} does not contain per-source folders or dated subdirectories"
-                    )
-                target_dir = dated_dirs[-1]
-                candidate = target_dir / "all.txt"
-                typer.echo(f"Detected latest date directory {target_dir.name}; using {candidate}")
-                if not candidate.exists():
-                    raise typer.BadParameter(
-                        f"Directory {target_dir} does not contain all.txt; specify a valid date folder"
-                    )
-
-            if selected_source_slug:
-                source_candidate = target_dir / f"{selected_source_slug}.txt"
-                if not source_candidate.exists():
-                    raise typer.BadParameter(
-                        f"Source '{source_label}' does not have a URL list under {target_dir}"
-                    )
-                return source_candidate
-            return candidate
-
-        search_dir = path
-        for folder_name in ("url_list", "url_lists"):
-            candidate_dir = search_dir / folder_name
-            if candidate_dir.is_dir():
-                search_dir = candidate_dir
-                break
-
-        bucket_dirs: List[Path] = []
-        if selected_source_slug:
-            if search_dir.name == selected_source_slug:
-                bucket_dirs.append(search_dir)
-            bucket_dirs.append(search_dir / selected_source_slug)
-        else:
-            if search_dir.name == "all":
-                bucket_dirs.append(search_dir)
-            bucket_dirs.append(search_dir / "all")
-
-        for bucket_dir in bucket_dirs:
-            if bucket_dir.is_dir():
-                return _latest_txt_file(bucket_dir)
-
-        legacy_dirs = [child for child in search_dir.iterdir() if child.is_dir() and child.name.isdigit()]
-        if selected_source_slug and not legacy_dirs:
-            raise typer.BadParameter(
-                f"Source '{source_label}' does not have a directory under {search_dir}. "
-                "Expected data/url_list/<source>/<YYYYMMDD>.txt files."
-            )
-        return _resolve_legacy_layout(search_dir, legacy_dirs=legacy_dirs or None)
-
-    url_file = _resolve_url_list_file(data_path)
+    url_files = _collect_url_list_files(data_path)
+    typer.echo(f"Found {len(url_files)} URL list file(s) to process")
+    
     crawler_sources = SOURCES
-    if selected_source_slug:
-        matching_sources = [src for src in SOURCES if src.name.lower() == selected_source_slug]
-        if not matching_sources:
-            available = ", ".join(src.name for src in SOURCES)
-            raise typer.BadParameter(
-                f"Unknown source '{source_label}'. Available options: {available}"
-            )
-        crawler_sources = matching_sources
     state_mgr = StateManager()
     progress_mgr = CrawlProgressManager()
     if reset_state:
@@ -283,66 +208,79 @@ def crawl(
         state_manager=state_mgr if resume else None,
     )
 
-    urls = [
-        line.strip()
-        for line in url_file.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-    if not urls:
-        raise typer.BadParameter("URL file does not contain any entries.")
-    start_offset = progress_mgr.get_offset(url_file) if resume else 0
-    if start_offset >= len(urls):
-        typer.echo("All URLs in this list have already been processed. Use --reset-state to start over.")
-        return
-    if start_offset:
-        urls = urls[start_offset:]
-    if max_urls:
-        urls = urls[:max_urls]
-    if not urls:
-        typer.echo("No URLs selected for this batch after applying limits.")
-        return
-
-    processed_dates: List[date] = []
-    total_urls = len(urls)
-    completed_urls = 0
+    all_processed_dates: List[date] = []
     
-    typer.echo(f"Starting to crawl {total_urls} URLs...")
-    with ArticleCrawler(crawler_sources, output_dir=ARTICLES_DIR) as crawler:
-        def advance(url: str) -> None:
-            nonlocal completed_urls
-            completed_urls += 1
-            if resume:
-                progress_mgr.save_offset(url_file, start_offset + completed_urls)
-            # Use carriage return to overwrite the same line
-            typer.echo(f"\r[{completed_urls}/{total_urls}] {url}", nl=False)
+    for url_file in url_files:
+        typer.echo(f"\nProcessing file: {url_file.name}")
+        
+        urls = [
+            line.strip()
+            for line in url_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        if not urls:
+            typer.echo(f"  Skipping {url_file.name}: no URLs found")
+            continue
+            
+        start_offset = progress_mgr.get_offset(url_file) if resume else 0
+        if start_offset >= len(urls):
+            typer.echo(f"  All URLs in {url_file.name} have already been processed")
+            continue
+        if start_offset:
+            urls = urls[start_offset:]
+        if max_urls:
+            urls = urls[:max_urls]
+        if not urls:
+            typer.echo(f"  No URLs selected from {url_file.name} after applying limits")
+            continue
 
-        if batch_size:
-            for chunk in chunked(urls, batch_size):
-                chunk_dates = crawler.crawl(
-                    chunk,
+        processed_dates: List[date] = []
+        total_urls = len(urls)
+        completed_urls = 0
+        
+        typer.echo(f"  Starting to crawl {total_urls} URLs from {url_file.name}...")
+        with ArticleCrawler(crawler_sources, output_dir=ARTICLES_DIR) as crawler:
+            def advance(url: str) -> None:
+                nonlocal completed_urls
+                completed_urls += 1
+                if resume:
+                    progress_mgr.save_offset(url_file, start_offset + completed_urls)
+                # Use carriage return to overwrite the same line
+                typer.echo(f"\r  [{completed_urls}/{total_urls}] {url}", nl=False)
+
+            if batch_size:
+                for chunk in chunked(urls, batch_size):
+                    chunk_dates = crawler.crawl(
+                        chunk,
+                        since=effective_since,
+                        progress_callback=advance,
+                    )
+                    processed_dates.extend(chunk_dates)
+            else:
+                processed_dates = crawler.crawl(
+                    urls,
                     since=effective_since,
                     progress_callback=advance,
                 )
-                processed_dates.extend(chunk_dates)
+
+        # Print newline after progress display
+        typer.echo("")
+        
+        if processed_dates:
+            all_processed_dates.extend(processed_dates)
+            typer.echo(f"  Processed {len(processed_dates)} articles from {url_file.name}")
         else:
-            processed_dates = crawler.crawl(
-                urls,
-                since=effective_since,
-                progress_callback=advance,
-            )
+            typer.echo(f"  No articles processed from {url_file.name}")
 
-    # Print newline after progress display
-    typer.echo("")
+        if resume:
+            progress_mgr.save_offset(url_file, start_offset + completed_urls)
     
-    if processed_dates:
-        latest_date = max(processed_dates)
+    if all_processed_dates:
+        latest_date = max(all_processed_dates)
         state_mgr.save(latest_date)
-        typer.echo(f"Processed {len(processed_dates)} articles. Last date saved: {latest_date}")
+        typer.echo(f"\nTotal: Processed {len(all_processed_dates)} articles. Last date saved: {latest_date}")
     else:
-        typer.echo("No articles processed; state file unchanged.")
-
-    if resume:
-        progress_mgr.save_offset(url_file, start_offset + completed_urls)
+        typer.echo("\nNo articles processed; state file unchanged.")
 
 
 @app.command("crawl-today")
