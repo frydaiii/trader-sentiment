@@ -132,6 +132,26 @@ Options:
 - `src/vnnews/cli.py` – Typer-powered command-line interface.
 - `src/vnsentiment/*.py` – OpenAI-powered sentiment analysis helper module and CLI (`vnnews-sentiment`).
 
+## Symbols Utility
+
+Fetch and store the full list of HOSE symbols using `vnstock`:
+
+```bash
+source .venv/bin/activate
+python symbols/fetch_hose_symbols.py --output symbols/hose_symbols.csv
+```
+
+The script writes a CSV containing all HOSE tickers returned by `vnstock.Listing().symbols_by_exchange()`.
+
+List the ICB industry hierarchy (industry / sub-industry / sector) via `vnstock`:
+
+```bash
+source .venv/bin/activate
+python symbols/fetch_icb_industries.py --output symbols/icb_industries.csv
+```
+
+The script uses `vnstock.Listing().industries_icb()` and writes the result to CSV sorted by industry code.
+
 ## Notes
 
 - Make sure outbound requests respect the target sites’ rate limits.

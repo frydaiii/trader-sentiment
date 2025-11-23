@@ -1,0 +1,156 @@
+icb_code,icb_name,level,en_icb_name
+0001,Dầu khí,1,Oil & Gas
+0500,Dầu khí,2,Oil & Gas
+0530,Sản xuất Dầu khí,3,Oil & Gas Producers
+0533,Sản xuất và Khai thác dầu khí,4,Exploration & Production
+0570,"Thiết bị, Dịch vụ và Phân phối Dầu khí",3,"Oil Equipment, Services & Distribution"
+0573,Thiết bị và Dịch vụ Dầu khí,4,Oil Equipment & Services
+1000,Nguyên vật liệu,1,Basic Materials
+1300,Hóa chất,2,Chemicals
+1350,Hóa chất,3,Chemicals
+1353,"Nhựa, cao su & sợi",4,Commodity Chemicals
+1357,"Sản phẩm hóa dầu, Nông dược & Hóa chất khác",4,Specialty Chemicals
+1700,Tài nguyên Cơ bản,2,Basic Resources
+1730,Lâm nghiệp và Giấy,3,Forestry & Paper
+1733,Lâm sản và Chế biến gỗ,4,Forestry
+1737,Sản xuất giấy,4,Paper
+1750,Kim loại,3,Industrial Metals & Mining
+1753,Nhôm,4,Aluminum
+1755,Kim Loại màu,4,Nonferrous Metals
+1757,Thép và sản phẩm thép,4,Steel
+1770,Khai khoáng,3,Mining
+1771,Khai thác Than,4,Coal
+1775,Khai khoáng,4,General Mining
+1777,Khai thác vàng,4,Gold Mining
+2000,Công nghiệp,1,Industrials
+2300,Xây dựng và Vật liệu,2,Construction & Materials
+2350,Xây dựng và Vật liệu,3,Construction & Materials
+2353,Vật liệu xây dựng & Nội thất,4,Building Materials & Fixtures
+2357,Xây dựng,4,Heavy Construction
+2700,Hàng & Dịch vụ Công nghiệp,2,Industrial Goods & Services
+2720,Hàng công nghiệp,3,General Industrials
+2723,Containers & Đóng gói,4,Containers & Packaging
+2727,Công nghiệp phức hợp,4,Diversified Industrials
+2730,Điện tử & Thiết bị điện,3,Electronic & Electrical Equipment
+2733,Hàng điện & điện tử,4,Electrical Components & Equipment
+2737,Thiết bị điện,4,Electronic Equipment
+2750,Công nghiệp nặng,3,Industrial Engineering
+2753,Xe tải & Đóng tàu,4,Commercial Vehicles & Trucks
+2757,Máy công nghiệp,4,Industrial Machinery
+2770,Vận tải,3,Industrial Transportation
+2771,Chuyển phát nhanh,4,Delivery Services
+2773,Vận tải Thủy,4,Marine Transportation
+2775,Đường sắt,4,Railroads
+2777,"Kho bãi, hậu cần và bảo dưỡng",4,Transportation Services
+2779,Dịch vụ vận tải,4,Trucking
+2790,Tư vấn & Hỗ trợ Kinh doanh,3,Support Services
+2791,Tư vấn & Hỗ trợ KD,4,Business Support Services
+2793,Đào tạo & Việc làm,4,Business Training & Employment Agencies
+2795,Quản lý Tài chính,4,Financial Administration
+2797,Nhà cung cấp thiết bị,4,Industrial Suppliers
+2799,Chất thải & Môi trường,4,Waste & Disposal Services
+3000,Hàng Tiêu dùng,1,Consumer Goods
+3300,Ô tô và phụ tùng,2,Automobiles & Parts
+3350,Ô tô và phụ tùng,3,Automobiles & Parts
+3353,Sản xuất ô tô,4,Automobiles
+3355,Phụ tùng ô tô,4,Auto Parts
+3357,Lốp xe,4,Tires
+3500,Thực phẩm và đồ uống,2,Food & Beverage
+3530,Bia và đồ uống,3,Beverages
+3533,Sản xuất bia,4,Brewers
+3535,Vang & Rượu mạnh,4,Distillers & Vintners
+3537,Đồ uống & giải khát,4,Soft Drinks
+3570,Sản xuất thực phẩm,3,Food Producers
+3573,Nuôi trồng nông & hải sản,4,Farming & Fishing
+3577,Thực phẩm,4,Food Products
+3700,Hàng cá nhân & Gia dụng,2,Personal & Household Goods
+3720,Hàng gia dụng,3,Household Goods & Home Construction
+3722,Đồ gia dụng lâu bền,4,Durable Household Products
+3724,Đồ gia dụng một lần,4,Nondurable Household Products
+3726,Thiết bị gia dụng,4,Furnishings
+3740,Hàng hóa giải trí,3,Leisure Goods
+3743,Điện tử tiêu dùng,4,Consumer Electronics
+3747,Đồ chơi,4,Toys
+3760,Hàng cá nhân,3,Personal Goods
+3763,Hàng May mặc,4,Clothing & Accessories
+3765,Giầy dép,4,Footwear
+3767,Hàng cá nhân,4,Personal Products
+3780,Thuốc lá,3,Tobacco
+3785,Thuốc lá,4,Tobacco
+4000,Dược phẩm và Y tế,1,Health Care
+4500,Y tế,2,Health Care
+4530,Thiết bị và Dịch vụ Y tế,3,Health Care Equipment & Services
+4533,Chăm sóc y tế,4,Health Care Providers
+4535,Thiết bị y tế,4,Medical Equipment
+4537,Dụng cụ y tế,4,Medical Supplies
+4570,Dược phẩm,3,Pharmaceuticals & Biotechnology
+4573,Công nghệ sinh học,4,Biotechnology
+4577,Dược phẩm,4,Pharmaceuticals
+5000,Dịch vụ Tiêu dùng,1,Consumer Services
+5300,Bán lẻ,2,Retail
+5330,Phân phối thực phẩm & dược phẩm,3,Food & Drug Retailers
+5333,Phân phối dược phẩm,4,Drug Retailers
+5337,Phân phối thực phẩm,4,Food Retailers & Wholesalers
+5370,Bán lẻ,3,General Retailers
+5373,Bán lẻ phức hợp,4,Broadline Retailers
+5377,Dịch vụ tiêu dùng chuyên ngành,4,Specialized Consumer Services
+5379,Phân phối hàng chuyên dụng,4,Specialty Retailers
+5500,Truyền thông,2,Media
+5550,Truyền thông,3,Media
+5553,Giải trí & Truyền thông,4,Broadcasting & Entertainment
+5555,Dịch vụ truyền thông,4,Media Agencies
+5557,"Sách, ấn bản & sản phẩm văn hóa",4,Publishing
+5700,Du lịch và Giải trí,2,Travel & Leisure
+5750,Du lịch & Giải trí,3,Travel & Leisure
+5751,Hàng không,4,Airlines
+5753,Khách sạn,4,Hotels
+5755,Dịch vụ giải trí,4,Recreational Services
+5757,Nhà hàng và quán bar,4,Restaurants & Bars
+5759,Vận tải hành khách & Du lịch,4,Travel & Tourism
+6000,Viễn thông,1,Telecommunications
+6500,Viễn thông,2,Telecommunications
+6530,Viễn thông cố định,3,Fixed Line Telecommunications
+6535,Viễn thông cố định,4,Fixed Line Telecommunications
+6570,Viễn thông di động,3,Mobile Telecommunications
+6575,Viễn thông di động,4,Mobile Telecommunications
+7000,Tiện ích Cộng đồng,1,Utilities
+7500,"Điện, nước & xăng dầu khí đốt",2,Utilities
+7530,Sản xuất & Phân phối Điện,3,Electricity
+7535,Sản xuất & Phân phối Điện,4,Conventional Electricity
+7570,Nước & Khí đốt,3,"Gas, Water & Multi-utilities"
+7573,Phân phối xăng dầu & khí đốt,4,Gas Distribution
+7575,Tiện ích khác,4,Multiutilities
+7577,Nước,4,Water
+8000,Tài chính,1,Financials
+8300,Ngân hàng,2,Banks
+8301,Ngân hàng,1,Banks
+8350,Ngân hàng,3,Banks
+8355,Ngân hàng,4,Banks
+8500,Bảo hiểm,2,Insurance
+8530,Bảo hiểm phi nhân thọ,3,Nonlife Insurance
+8536,Bảo hiểm phi nhân thọ,4,Property & Casualty Insurance
+8538,Tái bảo hiểm,4,Reinsurance
+8570,Bảo hiểm nhân thọ,3,Life Insurance
+8575,Bảo hiểm nhân thọ,4,Life Insurance
+8600,Bất động sản,2,Real Estate
+8630,Bất động sản,3,Real Estate Investment & Services
+8633,Bất động sản,4,Real Estate Holding & Development
+8637,"Tư Vấn, Định giá, Môi giới Bất động sản",4,Real Estate Services
+8700,Dịch vụ tài chính,2,Financial Services
+8770,Dịch vụ tài chính,3,Financial Services
+8771,Quản lý tài sản,4,Asset Managers
+8773,Tài chính cá nhân,4,Consumer Finance
+8775,Tài chính đặc biệt,4,Specialty Finance
+8777,Môi giới chứng khoán,4,Investment Services
+8980,Quỹ đầu tư,3,Equity Investment Instruments
+8985,Quỹ đầu tư,4,Equity Investment Instruments
+9000,Công nghệ Thông tin,1,Technology
+9500,Công nghệ Thông tin,2,Technology
+9530,Phần mềm & Dịch vụ Máy tính,3,Software & Computer Services
+9533,Dịch vụ Máy tính,4,Computer Services
+9535,Internet,4,Internet
+9537,Phần mềm,4,Software
+9570,Thiết bị và Phần cứng,3,Technology Hardware & Equipment
+9572,Phần cứng,4,Computer Hardware
+9574,Thiết bị văn phòng,4,Electronic Office Equipment
+9578,Thiết bị viễn thông,4,Telecommunications Equipment
