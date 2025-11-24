@@ -1,0 +1,115 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "vnnews-crawler: Crawl VNEconomy",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "vnnews.cli",
+            "args": [
+                "crawl",
+                "vneconomy",
+                "--start-date",
+                "2024-01-01",
+                "--end-date",
+                "2024-01-31"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/set_env.sh",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "vnnews-sentiment: Classify Entities",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "vnsentiment.cli",
+            "args": [
+                "classify-entities",
+                "data/articles/vneconomy/2024",
+                "--output-dir",
+                "data/sentiment/entities",
+                "--min-confidence",
+                "0.6",
+                "--glob",
+                "*.json"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/set_env.sh",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "vnnews-sentiment: Score Single File",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "vnsentiment.cli",
+            "args": [
+                "score-file",
+                "data/articles/vneconomy/2024/2024-11-25/1-000-doanh-nghi-p-t-ch-c-tham-gia-th-ng-khuy-n-m-i-h-i-ph-ng.json",
+                "--output",
+                "data/sentiment/scores.jsonl"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/set_env.sh",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "vnnews-sentiment: Batch Score",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "vnsentiment.cli",
+            "args": [
+                "batch",
+                "data/articles/vneconomy/2024",
+                "--glob",
+                "*.json",
+                "--output",
+                "data/sentiment/scores.jsonl",
+                "--limit",
+                "100"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/set_env.sh",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "Fetch HOSE Symbols",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/symbols/fetch_hose_symbols.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Fetch ICB Industries",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/symbols/fetch_icb_industries.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
