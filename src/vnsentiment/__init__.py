@@ -7,4 +7,5 @@ __all__ = [
     "models",
     "analyzer",
     "cli",
+    "entity_classifier",
 ]

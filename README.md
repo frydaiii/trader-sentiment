@@ -121,6 +121,29 @@ Options:
 - `--limit N` – stop after N files when batching.
 - `--glob PATTERN` – restrict which article JSON files are scored.
 
+### Entity Classification
+
+Tag crawled articles to HOSE-listed entities using the symbol and ICB reference CSVs under `symbols/`:
+
+```bash
+source .venv/bin/activate
+export OPENAI_API_KEY=sk-...
+vnnews-sentiment classify-entities data/articles/vneconomy/2024 --output-dir data/sentiment/entities --min-confidence 0.6
+```
+
+Outputs six JSON files grouped by publish date under `data/sentiment/entities/<YYYY-MM-DD>/`:
+
+- `symbols.json` – `TICKER -> [article_paths]`
+- `subsectors.json`, `sectors.json`, `subindustries.json`, `industries.json` – each maps ICB code → `{ "name": ..., "articles": [...] }`
+- `macro.json` – list of article paths deemed macro/market-wide (set by the model)
+
+Defaults:
+
+- `--symbols-csv symbols/hose_symbols.csv`
+- `--icb-csv symbols/icb_industries.csv`
+- `--glob "*.json"` with an optional `--limit N` to cap processed articles.
+Publish-date subfolders are created automatically from article metadata (falls back to path or `unknown-date`).
+
 ## Project Layout
 
 - `src/vnnews/config.py` – shared constants and source definitions.
