@@ -95,6 +95,15 @@ def _publish_date(article: ArticleInput, path: Path) -> str:
     return "unknown-date"
 
 
+def _month_key(date_key: str) -> str:
+    """
+    Coarse bucket for batching; keeps year-month when a full date is available.
+    """
+    if len(date_key) >= 7 and date_key[4] == "-" and date_key[5:7].isdigit():
+        return date_key[:7]
+    return date_key
+
+
 def _iter_entity_batch_requests(
     classifier: EntityClassifier, entities: List[EntityDefinition], files: List[Path], limit: Optional[int], base_dir: Path
 ):
@@ -160,7 +169,9 @@ def score_file(
 
 @app.command("classify-entities")
 def classify_entities(
-    articles_dir: Path = typer.Argument(..., exists=True, file_okay=False),
+    articles_dir: Optional[Path] = typer.Option(
+        None, "--articles-dir", exists=True, file_okay=False, help="Directory containing article JSON files for non-batch runs."
+    ),
     output_dir: Path = typer.Option(ENTITY_OUTPUT_DIR, help="Directory to write entity grouping JSON files."),
     symbols_csv: Path = typer.Option(SYMBOLS_PATH, exists=True, readable=True, help="Path to HOSE symbols CSV."),
     icb_csv: Path = typer.Option(ICB_INDUSTRIES_PATH, exists=True, readable=True, help="Path to ICB industries CSV."),
@@ -169,12 +180,23 @@ def classify_entities(
     glob: str = typer.Option("*.json", help="Glob for article JSON files."),
     limit: Optional[int] = typer.Option(None, help="Process at most this many articles."),
     min_confidence: float = typer.Option(0.55, help="Minimum confidence to accept an entity match (0-1)."),
-    batch_mode: Optional[Literal["create", "status"]] = typer.Option(
+    batch_mode: Optional[Literal["create", "upload", "status"]] = typer.Option(
         None,
-        help="Use the OpenAI batch API. 'create' builds/uploads a JSONL request file; 'status' retrieves batch status and downloads results when ready.",
+        help="Use the OpenAI batch API. 'create' builds JSONL request files; 'upload' sends them to OpenAI; 'status' retrieves batch status and downloads results when ready.",
     ),
-    batch_input: Optional[Path] = typer.Option(
-        None, help=f"Directory to store per-date JSONL request files for batch creation (default: {ENTITY_BATCH_REQUESTS_DIR})."
+    batch_input_folder: Optional[Path] = typer.Option(
+        None,
+        "--batch-input-folder",
+        exists=True,
+        file_okay=False,
+        help=f"Folder of article JSON files for batch creation (default output for requests: {ENTITY_BATCH_REQUESTS_DIR}).",
+    ),
+    batch_input_file: Optional[Path] = typer.Option(
+        None,
+        "--batch-input-file",
+        exists=True,
+        dir_okay=False,
+        help="Path to a requests.jsonl file (required for --batch-mode=upload/status).",
     ),
     batch_output: Optional[Path] = typer.Option(
         None, help=f"Destination for batch results when downloading (default: {ENTITY_BATCH_OUTPUT_PATH})."
@@ -184,10 +206,13 @@ def classify_entities(
     Identify which HOSE-listed entities each article discusses and map symbols to article file names.
     """
     if batch_mode == "status":
-        progress_base = batch_input or ENTITY_BATCH_REQUESTS_DIR
-        progress_files = sorted(progress_base.rglob("progress.json"))
+        if not batch_input_file:
+            raise typer.BadParameter("--batch-input-file is required when --batch-mode=status")
+        progress_path = batch_input_file.parent / "progress.json"
+        progress_base = batch_input_file.parent
+        progress_files = [progress_path] if progress_path.exists() else []
         if not progress_files:
-            raise typer.BadParameter(f"No progress.json files found under {progress_base}")
+            raise typer.BadParameter(f"No progress.json found alongside {batch_input_file}")
         client = _get_openai_client()
         for progress_path in progress_files:
             try:
@@ -224,6 +249,7 @@ def classify_entities(
                     "status": batch_job.status,
                     "output_file_id": output_file_id,
                     "error_file_id": error_file_id,
+                    "errors": [err.message for err in batch_job.errors.data] if batch_job.errors and batch_job.errors.data else [],
                     "updated_at": datetime.utcnow().isoformat() + "Z",
                 }
             )
@@ -231,63 +257,113 @@ def classify_entities(
             typer.echo(f"Updated progress at {progress_path}")
         return
 
+    if batch_mode == "upload":
+        if not batch_input_file:
+            raise typer.BadParameter("--batch-input-file is required when --batch-mode=upload")
+        path = batch_input_file
+        base_dir = path.parent
+        if not path.exists():
+            raise typer.BadParameter(f"requests.jsonl not found at {path}")
+        progress_path = base_dir / "progress.json"
+        try:
+            progress_payload = orjson.loads(progress_path.read_bytes())
+        except Exception:
+            progress_payload = {}
+        if progress_payload.get("batch_id"):
+            typer.echo(f"Skipping {path} because batch_id {progress_payload['batch_id']} already exists in progress.")
+            return
+        client = _get_openai_client()
+        date_key = path.parent.name
+        typer.echo(f"Handling publish month {date_key}")
+        if "request_count" not in progress_payload:
+            try:
+                progress_payload["request_count"] = sum(1 for _ in path.open("rb"))
+            except Exception:
+                progress_payload["request_count"] = None
+        upload = client.files.create(file=path, purpose="batch")
+        batch_job = client.batches.create(
+            input_file_id=upload.id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+            metadata={"command": "classify-entities", "date": date_key},
+        )
+        typer.echo(
+            f"Created batch {batch_job.id} for {date_key} (status={batch_job.status}) using {path} with {progress_payload.get('request_count')} requests"
+        )
+        progress_payload.update(
+            {
+                "batch_id": batch_job.id,
+                "status": batch_job.status,
+                "requests_file": str(path),
+                "date_key": date_key,
+                "model": model,
+                "errors": [],
+                "created_at": progress_payload.get("created_at") or datetime.utcnow().isoformat() + "Z",
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+            }
+        )
+        _write_progress(progress_path, progress_payload)
+        typer.echo(f"Updated progress at {progress_path}")
+        return
+
+    source_dir: Optional[Path]
+    if batch_mode == "create":
+        source_dir = batch_input_folder
+        if not source_dir:
+            raise typer.BadParameter("--batch-input-folder is required when --batch-mode=create")
+    else:
+        source_dir = articles_dir
+
+    if not source_dir:
+        raise typer.BadParameter("--articles-dir is required when batch_mode is not 'status' or 'upload'")
+
     classifier = _init_entity_classifier(model, temperature)
     icb_lookup = load_icb_lookup(icb_csv)
     entities = load_hose_symbols(symbols_csv, icb_lookup)
-    files = sorted(articles_dir.rglob(glob))
+    files = sorted(source_dir.rglob(glob))
     if not files:
-        raise typer.BadParameter(f"No files matching {glob} under {articles_dir}")
+        raise typer.BadParameter(f"No files matching {glob} under {source_dir}")
 
     if batch_mode == "create":
-        base_dir = batch_input or ENTITY_BATCH_REQUESTS_DIR
+        base_dir = ENTITY_BATCH_REQUESTS_DIR
         base_dir.mkdir(parents=True, exist_ok=True)
         handles: Dict[str, any] = {}
         counts: Dict[str, int] = defaultdict(int)
         batch_files: Dict[str, Path] = {}
-        last_announced_date: Optional[str] = None
+        last_announced_bucket: Optional[str] = None
         try:
-            for date_key, request in _iter_entity_batch_requests(classifier, entities, files, limit, articles_dir):
-                if date_key != last_announced_date:
-                    typer.echo(f"Handling publish date {date_key}")
-                    last_announced_date = date_key
-                target = base_dir / date_key / "requests.jsonl"
+            for date_key, request in _iter_entity_batch_requests(classifier, entities, files, limit, source_dir):
+                month_key = _month_key(date_key)
+                if month_key != last_announced_bucket:
+                    typer.echo(f"Handling publish month {month_key}")
+                    last_announced_bucket = month_key
+                target = base_dir / month_key / "requests.jsonl"
                 target.parent.mkdir(parents=True, exist_ok=True)
-                if date_key not in handles:
-                    handles[date_key] = target.open("ab")
-                    batch_files[date_key] = target
-                handle = handles[date_key]
+                if month_key not in handles:
+                    handles[month_key] = target.open("ab")
+                    batch_files[month_key] = target
+                handle = handles[month_key]
                 handle.write(orjson.dumps(request))
                 handle.write(b"\n")
-                counts[date_key] += 1
+                counts[month_key] += 1
         finally:
             for handle in handles.values():
                 handle.close()
         if not batch_files:
             raise typer.BadParameter("No requests generated for batch creation.")
-        client = _get_openai_client()
         for date_key, path in batch_files.items():
-            upload = client.files.create(file=path, purpose="batch")
-            batch_job = client.batches.create(
-                input_file_id=upload.id,
-                endpoint="/v1/chat/completions",
-                completion_window="24h",
-                metadata={"command": "classify-entities", "date": date_key},
-            )
-            typer.echo(
-                f"Created batch {batch_job.id} for {date_key} (status={batch_job.status}) using {path} with {counts[date_key]} requests"
-            )
             progress_payload = {
-                "batch_id": batch_job.id,
-                "status": batch_job.status,
                 "requests_file": str(path),
                 "request_count": counts[date_key],
                 "date_key": date_key,
                 "model": model,
+                "errors": [],
+                "status": "pending-upload",
                 "created_at": datetime.utcnow().isoformat() + "Z",
             }
             progress_path = path.parent / "progress.json"
             _write_progress(progress_path, progress_payload)
-            typer.echo(f"Saved progress to {progress_path}")
+            typer.echo(f"Wrote {path} with {counts[date_key]} requests (progress at {progress_path})")
         return
 
     processed = 0
