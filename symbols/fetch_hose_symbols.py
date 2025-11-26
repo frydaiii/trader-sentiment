@@ -111,6 +111,22 @@ def fetch_hose_symbols(output: Path) -> Path:
     if hose_df.empty:
         raise RuntimeError("No HOSE symbols found in vnstock response.")
 
+    type_col = detect_column(
+        hose_df.columns,
+        (
+            "type",
+            "stock_type",
+            "security_type",
+            "organ_type",
+            "category",
+            "instrument_type",
+        ),
+    )
+    if type_col:
+        hose_df = hose_df[hose_df[type_col].astype(str).str.upper() == "STOCK"].copy()
+        if hose_df.empty:
+            raise RuntimeError("HOSE symbols found, but none with type=STOCK.")
+
     ticker_col = detect_column(hose_df.columns, ("ticker", "symbol", "code", "stockcode"))
     if not ticker_col:
         raise RuntimeError("Could not find ticker column among HOSE symbols.")
