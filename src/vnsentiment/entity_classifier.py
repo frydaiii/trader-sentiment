@@ -142,18 +142,15 @@ class EntityClassifier:
         self.temperature = temperature
         self._client = client or OpenAI()
 
+    @staticmethod
+    def _supports_temperature(model: str) -> bool:
+        # Some OpenAI models only allow the default temperature (1) and reject overrides.
+        fixed_temp_prefixes = ("gpt-5-nano",)
+        return not any(model.startswith(prefix) for prefix in fixed_temp_prefixes)
+
     def classify_article(self, article: ArticleInput, entities: Iterable[EntityDefinition]) -> EntityClassification:
-        entity_list = list(entities)
-        prompt = self._build_prompt(article, entity_list)
-        response = self._client.chat.completions.create(
-            model=self.model,
-            temperature=self.temperature,
-            response_format={"type": "json_schema", "json_schema": {"name": "entity_matches", "schema": ENTITY_RESPONSE_SCHEMA}},
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
+        request_body = self.build_request_body(article, entities)
+        response = self._client.chat.completions.create(**request_body)
         payload = self._parse_response(response)
         logger.debug("Entity payload: %s", payload)
         matches: List[EntityMatch] = []
@@ -166,6 +163,26 @@ class EntityClassifier:
             matches.append(EntityMatch(symbol=symbol, confidence=confidence, rationale=rationale))
         macro_flag = bool(payload.get("macro", False))
         return EntityClassification(matches=matches, macro=macro_flag)
+
+    def build_request_body(self, article: ArticleInput, entities: Iterable[EntityDefinition]) -> dict:
+        """
+        Build the OpenAI chat.completions request payload used for both realtime and batch calls.
+        """
+        entity_list = list(entities)
+        prompt = self._build_prompt(article, entity_list)
+        request: dict = {
+            "model": self.model,
+            "response_format": {"type": "json_schema", "json_schema": {"name": "entity_matches", "schema": ENTITY_RESPONSE_SCHEMA}},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        if self._supports_temperature(self.model):
+            request["temperature"] = self.temperature
+        elif self.temperature not in (None, 1):
+            logger.warning("Model %s enforces default temperature; ignoring temperature override %s", self.model, self.temperature)
+        return request
 
     def _build_prompt(self, article: ArticleInput, entities: List[EntityDefinition]) -> str:
         text = article.text.strip()

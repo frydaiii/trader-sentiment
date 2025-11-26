@@ -108,12 +108,6 @@ export OPENAI_API_KEY=sk-...
 vnnews-sentiment score-file data/articles/cafef/2025/2025-11-09/example.json --model gpt-4o-mini
 ```
 
-For batch processing of all crawler outputs in a directory (default JSONL destination is `data/sentiment/scores.jsonl`):
-
-```bash
-vnnews-sentiment batch data/articles/cafef --limit 200 --glob "*.json" --model gpt-4o-mini
-```
-
 Options:
 
 - `--model` / `--temperature` – configure OpenAI Responses API parameters (defaults in `vnsentiment.config`).
@@ -143,6 +137,19 @@ Defaults:
 - `--icb-csv symbols/icb_industries.csv`
 - `--glob "*.json"` with an optional `--limit N` to cap processed articles.
 Publish-date subfolders are created automatically from article metadata (falls back to path or `unknown-date`).
+
+Batch processing via the OpenAI Batch API is also available:
+
+```bash
+source .venv/bin/activate
+export OPENAI_API_KEY=sk-...
+# Create and upload per-date batch JSONL files (defaults under data/sentiment/entities/batch_requests/)
+vnnews-sentiment classify-entities data/articles/vneconomy/2024 --batch-mode create --limit 200
+# Later, poll status and download results once complete
+vnnews-sentiment classify-entities data/articles/vneconomy/2024 --batch-mode status --batch-id batch_abc123
+```
+
+The create step walks all matching article files (including subfolders) and appends requests to a per-date JSONL file in a streaming fashion before uploading each date file to OpenAI Batch.
 
 ## Project Layout
 
@@ -180,4 +187,4 @@ The script uses `vnstock.Listing().industries_icb()` and writes the result to CS
 - Make sure outbound requests respect the target sites’ rate limits.
 - `news-please` pulls many dependencies; use a virtual environment.
 - Review saved JSON outputs before downstream processing.
-- For sentiment scoring, set `OPENAI_API_KEY` before running `vnnews-sentiment score-file ...` or `vnnews-sentiment batch ...`.
+- For sentiment scoring, set `OPENAI_API_KEY` before running `vnnews-sentiment score-file ...`.
