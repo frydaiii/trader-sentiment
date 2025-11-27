@@ -9,16 +9,16 @@ authors = [
   {name = "Trader Sentiment Bot"}
 ]
 dependencies = [
-  "typer[all]>=0.12",
-  "httpx>=0.26",
-  "orjson>=3.9",
-  "tenacity>=8.2",
-  "news-please>=1.6",
-  "python-dateutil>=2.8",
-  "tqdm>=4.66",
-  "openai==2.7.2",
-  "underthesea>=6.8",
-  "vnstock>=0.1"
+  "typer[all]==0.20.0",
+  "httpx==0.28.1",
+  "orjson==3.11.4",
+  "tenacity==9.1.2",
+  "news-please==1.6.16",
+  "python-dateutil==2.9.0.post0",
+  "tqdm==4.67.1",
+  "openai==2.8.1",
+  "underthesea==8.3.0",
+  "vnstock==3.3.0"
 ]
 
 [project.scripts]
