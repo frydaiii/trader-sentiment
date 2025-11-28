@@ -147,6 +147,56 @@ def cleanup_paths(paths: Iterable[Path]) -> None:
             print(f"Warning: could not remove {path}")
 
 
+def handle_existing_batch(
+    client: OpenAI,
+    record: dict,
+    chunk_path: Path,
+    poll_seconds: int,
+    checkpoint: dict,
+    checkpoint_path: Path,
+) -> Path | None:
+    """
+    If a checkpoint entry exists for this chunk, resume polling or redownload output.
+
+    Returns the output path if the chunk is completed, otherwise exits on failure.
+    """
+    batch_id = record.get("batch_id")
+    output_str = record.get("output_path", "")
+    output_path = Path(output_str) if output_str else None
+    status = record.get("status")
+
+    if status == "completed" and output_path and output_path.exists():
+        print(f"Skipping already completed chunk {chunk_path.name}")
+        return output_path
+
+    if batch_id:
+        print(f"Resuming batch {batch_id} for chunk {chunk_path.name}...")
+        batch = poll_batch(client, batch_id, interval_seconds=poll_seconds)
+        if batch.status != "completed":
+            sys.exit(f"Batch {batch.id} for {chunk_path.name} did not complete (status: {batch.status}).")
+
+        output_file_id = getattr(batch, "output_file_id", None)
+        if not output_file_id:
+            sys.exit(f"No output file for completed batch {batch.id} ({chunk_path.name}).")
+
+        if not output_path:
+            output_path = chunk_path.with_name(f"{chunk_path.stem}_output.jsonl")
+
+        if not output_path.exists():
+            print(f"Downloading output to {output_path}...")
+            download_file(client, output_file_id, output_path)
+
+        checkpoint[chunk_path.name] = {
+            "status": "completed",
+            "output_path": str(output_path),
+            "batch_id": batch.id,
+        }
+        save_checkpoint(checkpoint_path, checkpoint)
+        return output_path
+
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -216,13 +266,20 @@ def main() -> None:
         chunk_key = str(chunk_path.name)
         existing_record = checkpoint.get(chunk_key)
         if existing_record:
-            output_path = Path(existing_record.get("output_path", ""))
-            if existing_record.get("status") == "completed" and output_path.exists():
-                print(f"Skipping already completed chunk {chunk_path.name}")
-                completed_outputs.append(output_path)
+            resumed_output = handle_existing_batch(
+                client=client,
+                record=existing_record,
+                chunk_path=chunk_path,
+                poll_seconds=args.poll_seconds,
+                checkpoint=checkpoint,
+                checkpoint_path=checkpoint_path,
+            )
+            if resumed_output:
+                completed_outputs.append(resumed_output)
                 continue
 
         print(f"Uploading {chunk_path.name}...")
+        output_path = script_dir / f"{chunk_path.stem}_output.jsonl"
         try:
             input_file = upload_batch_file(client, chunk_path)
             batch = create_batch(
@@ -232,6 +289,12 @@ def main() -> None:
                 completion_window=args.completion_window,
             )
             print(f"Submitted batch {batch.id} for {chunk_path.name}")
+            checkpoint[chunk_key] = {
+                "status": "processing",
+                "batch_id": batch.id,
+                "output_path": str(output_path),
+            }
+            save_checkpoint(checkpoint_path, checkpoint)
             batch = poll_batch(client, batch.id, interval_seconds=args.poll_seconds)
         except OpenAIError as exc:
             sys.exit(f"OpenAI error while processing {chunk_path.name}: {exc}")
@@ -243,7 +306,6 @@ def main() -> None:
         if not output_file_id:
             sys.exit(f"No output file for completed batch {batch.id} ({chunk_path.name}).")
 
-        output_path = script_dir / f"{chunk_path.stem}_output.jsonl"
         print(f"Downloading output to {output_path}...")
         download_file(client, output_file_id, output_path)
         completed_outputs.append(output_path)
