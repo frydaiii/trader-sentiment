@@ -206,13 +206,17 @@ class EntityClassifier:
 
     @staticmethod
     def _entities_block(entities: List[EntityDefinition]) -> str:
-        lines = []
+        company_lines = []
+        industry_names = set()
         for entity in entities:
-            icb = f"ICB {entity.icb_code} - {entity.icb_name}" if entity.icb_code else "ICB unknown"
-            name_parts = [part for part in (entity.organ_short_name, entity.organ_name) if part]
-            names = ", ".join(name_parts)
-            lines.append(f"{entity.symbol}: {names} ({icb})")
-        return "\n".join(lines)
+            short_name = entity.organ_short_name or entity.organ_name or "unknown company"
+            company_lines.append(f"{entity.symbol}: {short_name}")
+            if entity.icb_name:
+                industry_names.add(entity.icb_name)
+        industry_lines = sorted(industry_names) or ["industry unknown"]
+        company_section = "Company short names:\n" + "\n".join(company_lines)
+        industry_section = "Industry names:\n" + "\n".join(industry_lines)
+        return f"{company_section}\n\n{industry_section}"
 
     @staticmethod
     def _parse_response(response) -> dict:
