@@ -13,4 +13,5 @@ ENTITY_OUTPUT_DIR = SENTIMENT_DIR / "entities"
 ENTITY_MAP_OUTPUT_PATH = ENTITY_OUTPUT_DIR / "symbols.json"
 ENTITY_BATCH_REQUESTS_DIR = ENTITY_OUTPUT_DIR / "batch_requests"
 ENTITY_BATCH_OUTPUT_PATH = ENTITY_OUTPUT_DIR / "entity_batch_results.jsonl"
+ENTITY_SENTIMENT_OUTPUT_DIR = SENTIMENT_DIR / "entity_sentiment"
 MAX_INPUT_TOKENS = 6000  # rough safeguard when trimming article text

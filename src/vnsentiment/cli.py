@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -14,11 +15,11 @@ from openai import OpenAI
 from .config import (
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
-    ENTITY_BATCH_REQUESTS_DIR,
     ENTITY_BATCH_OUTPUT_PATH,
+    ENTITY_BATCH_REQUESTS_DIR,
     ENTITY_OUTPUT_DIR,
+    ENTITY_SENTIMENT_OUTPUT_DIR,
     ICB_INDUSTRIES_PATH,
-    SENTIMENT_DIR,
     SYMBOLS_PATH,
 )
 from .entity_classifier import EntityClassifier, EntityDefinition, load_hose_symbols, load_icb_lookup
@@ -88,6 +89,24 @@ def _month_key(date_key: str) -> str:
     if len(date_key) >= 7 and date_key[4] == "-" and date_key[5:7].isdigit():
         return date_key[:7]
     return date_key
+
+
+_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _date_from_custom_id(custom_id: str) -> str:
+    """
+    Extract a YYYY-MM-DD date key from a batch custom_id or fall back to 'unknown-date'.
+    """
+    if not custom_id:
+        return "unknown-date"
+    for part in Path(custom_id).parts:
+        if _DATE_PATTERN.fullmatch(part):
+            return part
+    match = _DATE_PATTERN.search(custom_id)
+    if match:
+        return match.group(0)
+    return "unknown-date"
 
 
 def _iter_entity_batch_requests(
@@ -399,3 +418,95 @@ def classify_entities(
         (date_dir / "macro.json").write_bytes(orjson.dumps(sorted(set(macro_articles[date_key])), option=orjson.OPT_INDENT_2))
 
     typer.echo(f"Processed {processed} articles. Saved grouped outputs under {base_dir}")
+
+
+@app.command("extract-sentiment")
+def extract_sentiment(
+    batch_output_file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Path to classify-entities batch output JSONL file."
+    ),
+    output_dir: Path = typer.Option(
+        ENTITY_SENTIMENT_OUTPUT_DIR, file_okay=False, help="Directory to write per-date entity sentiment JSON files."
+    ),
+    min_confidence: float = typer.Option(0.0, help="Minimum confidence threshold for keeping a sentiment match."),
+) -> None:
+    """
+    Parse classify-entities batch output and emit per-date sentiment JSON files grouped by entity symbol.
+    """
+    buckets: Dict[str, Dict[str, List[dict]]] = defaultdict(lambda: defaultdict(list))
+    processed_matches = 0
+    skipped = 0
+
+    with batch_output_file.open("rb") as handle:
+        for line_no, raw_line in enumerate(handle, start=1):
+            if not raw_line.strip():
+                continue
+            try:
+                record = orjson.loads(raw_line)
+            except Exception as exc:  # pragma: no cover - log path
+                logger.warning("Line %s: invalid JSON (%s)", line_no, exc)
+                skipped += 1
+                continue
+
+            custom_id = str(record.get("custom_id") or record.get("id") or "").strip()
+            date_key = _date_from_custom_id(custom_id)
+
+            response = record.get("response") or {}
+            if record.get("error") or response.get("status_code") != 200:
+                logger.warning("Line %s: skipping due to error or non-200 status", line_no)
+                skipped += 1
+                continue
+
+            body = response.get("body") or {}
+            choices = body.get("choices") or []
+            if not choices:
+                logger.warning("Line %s: missing choices array", line_no)
+                skipped += 1
+                continue
+
+            message = choices[0].get("message") or {}
+            content = message.get("content")
+            if not content:
+                logger.warning("Line %s: missing message content", line_no)
+                skipped += 1
+                continue
+
+            try:
+                classification = orjson.loads(content)
+            except Exception as exc:  # pragma: no cover - log path
+                logger.warning("Line %s: invalid classification JSON (%s)", line_no, exc)
+                skipped += 1
+                continue
+
+            for match in classification.get("matches") or []:
+                symbol = str(match.get("symbol") or "").strip().upper()
+                if not symbol:
+                    continue
+                try:
+                    sentiment_score = float(match["sentiment"])
+                except Exception:
+                    continue
+                try:
+                    confidence_score = float(match.get("confidence", 0.0))
+                except Exception:
+                    confidence_score = 0.0
+                if confidence_score < min_confidence:
+                    continue
+                buckets[date_key][symbol].append(
+                    {"article": custom_id, "sentiment": sentiment_score, "confidence": confidence_score}
+                )
+                processed_matches += 1
+
+    if not buckets:
+        typer.echo("No sentiment matches found in the provided batch output.")
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for date_key in sorted(buckets.keys()):
+        path = output_dir / f"{date_key}.json"
+        path.write_bytes(orjson.dumps(buckets[date_key], option=orjson.OPT_INDENT_2))
+        typer.echo(
+            f"Wrote {path} with {sum(len(items) for items in buckets[date_key].values())} sentiment entries across {len(buckets[date_key])} symbols"
+        )
+
+    typer.echo(f"Captured {processed_matches} sentiment matches. Skipped {skipped} lines.")
