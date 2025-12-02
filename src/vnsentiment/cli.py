@@ -11,10 +11,8 @@ import orjson
 import typer
 from openai import OpenAI
 
-from .analyzer import SentimentAnalyzer
 from .config import (
     DEFAULT_MODEL,
-    DEFAULT_OUTPUT_PATH,
     DEFAULT_TEMPERATURE,
     ENTITY_BATCH_REQUESTS_DIR,
     ENTITY_BATCH_OUTPUT_PATH,
@@ -47,18 +45,6 @@ def _load_article(path: Path) -> ArticleInput:
         article.metadata["source"] = path.parts[-4] if len(path.parts) >= 4 else "unknown"
     article.metadata.setdefault("path", str(path))
     return article
-
-
-def _append_result(result_path: Path, content: dict) -> None:
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    with result_path.open("ab") as handle:
-        handle.write(orjson.dumps(content))
-        handle.write(b"\n")
-
-
-def _init_analyzer(model: str, temperature: float) -> SentimentAnalyzer:
-    client = _get_openai_client()
-    return SentimentAnalyzer(model=model, temperature=temperature, client=client)
 
 
 def _init_entity_classifier(model: str, temperature: float) -> EntityClassifier:
@@ -148,23 +134,6 @@ def _download_file_content(client: OpenAI, file_id: str) -> bytes:
 def _write_progress(progress_path: Path, payload: dict) -> None:
     progress_path.parent.mkdir(parents=True, exist_ok=True)
     progress_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
-
-
-@app.command("score-file")
-def score_file(
-    article_path: Path = typer.Argument(..., exists=True, readable=True),
-    output: Path = typer.Option(DEFAULT_OUTPUT_PATH, help="Destination JSONL file for scores."),
-    model: str = typer.Option(DEFAULT_MODEL),
-    temperature: float = typer.Option(DEFAULT_TEMPERATURE),
-) -> None:
-    """
-    Score a single article JSON file (as produced by the crawler).
-    """
-    article = _load_article(article_path)
-    analyzer = _init_analyzer(model, temperature)
-    result = analyzer.score_article(article)
-    _append_result(output, result.to_json())
-    typer.echo(f"Sentiment stored for {article_path} -> {output}")
 
 
 @app.command("classify-entities")
