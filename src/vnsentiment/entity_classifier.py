@@ -38,6 +38,7 @@ class EntityMatch:
     symbol: str
     confidence: float
     rationale: Optional[str] = None
+    sentiment: Optional[float] = None
 
 
 @dataclass
@@ -61,9 +62,15 @@ ENTITY_RESPONSE_SCHEMA = {
                         "maximum": 1,
                         "description": "Confidence that the article materially refers to the entity.",
                     },
+                    "sentiment": {
+                        "type": "number",
+                        "minimum": -1,
+                        "maximum": 1,
+                        "description": "Sentiment toward the entity: -1 (negative), 0 (neutral), 1 (positive).",
+                    },
                     "reasoning": {"type": "string"},
                 },
-                "required": ["symbol", "confidence"],
+                "required": ["symbol", "confidence", "sentiment"],
                 "additionalProperties": False,
             },
         },
@@ -81,6 +88,7 @@ SYSTEM_PROMPT = (
     "Given a list of entities (ticker, company name, ICB industry) and an article, return only the tickers that are clearly "
     "discussed or impacted (explicit name, ticker, or unmistakable reference). "
     "Ignore generic sector mentions that do not identify a specific company. "
+    "For each matched ticker, also assign a sentiment score in [-1, 1] where -1 is negative, 0 is neutral, and 1 is positive toward that entity. "
     "If no entity is relevant, return an empty list. "
     "Also set macro=true when the article is primarily about macroeconomics or whole stock market conditions rather than specific companies."
 )
@@ -160,7 +168,13 @@ class EntityClassifier:
                 continue
             confidence = float(match.get("confidence", 0))
             rationale = match.get("reasoning") or match.get("rationale")
-            matches.append(EntityMatch(symbol=symbol, confidence=confidence, rationale=rationale))
+            sentiment = match.get("sentiment")
+            if sentiment is not None:
+                try:
+                    sentiment = float(sentiment)
+                except (TypeError, ValueError):
+                    sentiment = None
+            matches.append(EntityMatch(symbol=symbol, confidence=confidence, rationale=rationale, sentiment=sentiment))
         macro_flag = bool(payload.get("macro", False))
         return EntityClassification(matches=matches, macro=macro_flag)
 
@@ -198,7 +212,8 @@ class EntityClassifier:
         entity_block = self._entities_block(entities)
         return (
             "Choose zero or more tickers from the list below that the article clearly references. "
-            "Do not add tickers that are only implied by general market commentary.\n\n"
+            "Do not add tickers that are only implied by general market commentary. "
+            "For each selected ticker, provide a sentiment score from -1 (negative) to 1 (positive) about that entity.\n\n"
             f"Entities:\n{entity_block}\n\n"
             f"Title: {article.title}\n{meta_block}\n\n"
             f"Article:\n{text}"
