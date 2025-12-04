@@ -22,7 +22,7 @@ from .config import (
     ICB_INDUSTRIES_PATH,
     SYMBOLS_PATH,
 )
-from .entity_classifier import EntityClassifier, EntityDefinition, load_hose_symbols, load_icb_lookup
+from .entity_classifier import EntityClassifier, EntityDefinition, ICBEntry, load_hose_symbols, load_icb_lookup
 from .models import ArticleInput
 
 
@@ -66,6 +66,32 @@ def _icb_rollup_codes(icb_code: str) -> Dict[str, str]:
         "subindustry": code[:2] + "00",
         "industry": code[:1] + "000",
     }
+
+
+def _augment_entities_for_prompt(entities: List[EntityDefinition], icb_lookup: Dict[str, ICBEntry]) -> List[EntityDefinition]:
+    """
+    Add ICB industry codes and a MACRO tag so the LLM can emit sentiments beyond tickers.
+    """
+    icb_entities = [
+        EntityDefinition(
+            symbol=code,
+            organ_short_name=entry.name or f"ICB {code}",
+            organ_name=entry.name or "",
+            icb_code=code,
+            icb_name=entry.name or "",
+            icb_level=entry.level,
+        )
+        for code, entry in icb_lookup.items()
+    ]
+    macro_entity = EntityDefinition(
+        symbol="MACRO",
+        organ_short_name="Macro/market-wide topics (policy, FX, inflation, GDP, broad market)",
+        organ_name="Macro/market-wide topics",
+        icb_code="",
+        icb_name="",
+        icb_level=None,
+    )
+    return entities + icb_entities + [macro_entity]
 
 
 def _publish_date(article: ArticleInput, path: Path) -> str:
@@ -307,7 +333,8 @@ def classify_entities(
 
     classifier = _init_entity_classifier(model, temperature)
     icb_lookup = load_icb_lookup(icb_csv)
-    entities = load_hose_symbols(symbols_csv, icb_lookup)
+    ticker_entities = load_hose_symbols(symbols_csv, icb_lookup)
+    entities = _augment_entities_for_prompt(ticker_entities, icb_lookup)
     files = sorted(source_dir.rglob(glob))
     if not files:
         raise typer.BadParameter(f"No files matching {glob} under {source_dir}")
@@ -368,7 +395,8 @@ def classify_entities(
     base_dir = output_dir
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    entity_by_symbol = {entity.symbol: entity for entity in entities}
+    entity_by_symbol = {entity.symbol: entity for entity in ticker_entities}
+    industry_codes = set(icb_lookup.keys())
 
     for path in files:
         if limit and processed >= limit:
@@ -377,14 +405,24 @@ def classify_entities(
             article = _load_article(path)
             classification = classifier.classify_article(article, entities)
             date_key = _publish_date(article, path)
-            if classification.macro:
-                macro_articles[date_key].append(str(path))
             for match in classification.matches:
                 if match.confidence < min_confidence:
                     continue
-                symbol_matches[date_key][match.symbol].append(str(path))
-                entity = entity_by_symbol.get(match.symbol)
-                if entity and entity.icb_code:
+                symbol = match.symbol
+                if symbol == "MACRO":
+                    macro_articles[date_key].append(str(path))
+                    continue
+                if symbol in industry_codes:
+                    rollups = _icb_rollup_codes(symbol) or {"industry": symbol}
+                    for level, code in rollups.items():
+                        icb_matches[date_key][level][code].append(str(path))
+                    continue
+                entity = entity_by_symbol.get(symbol)
+                if not entity:
+                    logger.warning("Unrecognized entity symbol %s in %s", symbol, path)
+                    continue
+                symbol_matches[date_key][symbol].append(str(path))
+                if entity.icb_code:
                     for level, code in _icb_rollup_codes(entity.icb_code).items():
                         icb_matches[date_key][level][code].append(str(path))
             processed += 1

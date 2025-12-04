@@ -55,7 +55,10 @@ ENTITY_RESPONSE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "symbol": {"type": "string", "description": "Ticker symbol of the entity that appears in the article."},
+                    "symbol": {
+                        "type": "string",
+                        "description": "Symbol of the entity that appears in the article (ticker, ICB industry code, or MACRO).",
+                    },
                     "confidence": {
                         "type": "number",
                         "minimum": 0,
@@ -74,23 +77,18 @@ ENTITY_RESPONSE_SCHEMA = {
                 "additionalProperties": False,
             },
         },
-        "macro": {
-            "type": "boolean",
-            "description": "True if the article is primarily about macroeconomics or broad market-wide topics rather than specific companies.",
-        },
     },
-    "required": ["matches", "macro"],
+    "required": ["matches"],
     "additionalProperties": False,
 }
 
 SYSTEM_PROMPT = (
-    "You are a financial news assistant tagging Vietnamese articles to HOSE-listed companies. "
-    "Given a list of entities (ticker, company name, ICB industry) and an article, return only the tickers that are clearly "
-    "discussed or impacted (explicit name, ticker, or unmistakable reference). "
-    "Ignore generic sector mentions that do not identify a specific company. "
-    "For each matched ticker, also assign a sentiment score in [-1, 1] where -1 is negative, 0 is neutral, and 1 is positive toward that entity. "
-    "If no entity is relevant, return an empty list. "
-    "Also set macro=true when the article is primarily about macroeconomics or whole stock market conditions rather than specific companies."
+    "You are a financial news assistant tagging Vietnamese articles to HOSE-listed companies, ICB industries, and macro/market-wide themes. "
+    "Given a list of allowed symbols (ticker, industry code, MACRO) and an article, return only the symbols that are clearly "
+    "discussed or impacted (explicit name, ticker/code, or unmistakable reference). "
+    "Ignore generic mentions that are not tied to one of the provided symbols. "
+    "For each matched symbol, also assign a sentiment score in the range [-1, 1] where -1 is negative, 0 is neutral, and 1 is positive toward that symbol. "
+    "If no symbol is relevant, return an empty list."
 )
 
 
@@ -211,9 +209,9 @@ class EntityClassifier:
         meta_block = "\n".join(meta_lines)
         entity_block = self._entities_block(entities)
         return (
-            "Choose zero or more tickers from the list below that the article clearly references. "
-            "Do not add tickers that are only implied by general market commentary. "
-            "For each selected ticker, provide a sentiment score from -1 (negative) to 1 (positive) about that entity.\n\n"
+            "Choose zero or more symbols (company tickers, ICB industry codes, or MACRO) from the lists below that the article clearly references. "
+            "Only use symbols explicitly connected to the article; do not guess. Use MACRO only when the focus is macroeconomics or the overall market. "
+            "For each selected symbol, provide a sentiment score from -1 (negative) to 1 (positive) about that symbol.\n\n"
             f"Entities:\n{entity_block}\n\n"
             f"Title: {article.title}\n{meta_block}\n\n"
             f"Article:\n{text}"
@@ -221,17 +219,28 @@ class EntityClassifier:
 
     @staticmethod
     def _entities_block(entities: List[EntityDefinition]) -> str:
-        company_lines = []
-        industry_names = set()
+        company_lines: List[str] = []
+        industry_lines: Dict[str, str] = {}
+        macro_line = "MACRO: Broad macroeconomics, monetary policy, FX, inflation, whole-market moves"
         for entity in entities:
+            if entity.symbol.upper() == "MACRO":
+                macro_line = f"{entity.symbol}: {entity.organ_short_name or entity.organ_name or macro_line}"
+                continue
+            if entity.symbol.isdigit():
+                label = entity.icb_name or entity.organ_short_name or entity.organ_name or "ICB industry"
+                level = f" (ICB level {entity.icb_level})" if entity.icb_level else ""
+                industry_lines.setdefault(entity.symbol, f"{entity.symbol}: {label}{level}")
+                continue
             short_name = entity.organ_short_name or entity.organ_name or "unknown company"
             company_lines.append(f"{entity.symbol}: {short_name}")
-            if entity.icb_name:
-                industry_names.add(entity.icb_name)
-        industry_lines = sorted(industry_names) or ["industry unknown"]
-        company_section = "Company short names:\n" + "\n".join(company_lines)
-        industry_section = "Industry names:\n" + "\n".join(industry_lines)
-        return f"{company_section}\n\n{industry_section}"
+            if entity.icb_code and entity.icb_name:
+                industry_lines.setdefault(entity.icb_code, f"{entity.icb_code}: {entity.icb_name}")
+        industry_section = "ICB industries (use the code as the symbol):\n" + "\n".join(
+            sorted(industry_lines.values()) or ["industry unknown"]
+        )
+        company_section = "Company tickers:\n" + "\n".join(company_lines)
+        macro_section = "Macro tag:\n" + macro_line
+        return f"{company_section}\n\n{industry_section}\n\n{macro_section}"
 
     @staticmethod
     def _parse_response(response) -> dict:
